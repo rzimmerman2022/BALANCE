@@ -1,3 +1,5 @@
+' File: src/services/BalanceCalculator.cls
+'---------------------------------------
 VERSION 1.0 CLASS
 BEGIN
   MultiUse = -1  'True
@@ -10,477 +12,1092 @@ Attribute VB_Exposed = False
 Option Explicit
 
 ' BALANCE - Bilateral Accounting Ledger for Analyzing Networked Couple Expenses
-' BalanceCalculator Class - Handles calculating balances between users
+' BalanceCalculator Class - Implements IBalanceCalculator
+'
+' Purpose: Performs financial calculations and analysis on transaction data.
+' This class handles balance calculations, spending summaries by category,
+' time-based analysis, and other financial metrics.
+'
+' Design Decisions:
+' - Uses PredeclaredId = True to enable Singleton pattern
+' - Implements IBalanceCalculator for loose coupling
+' - Uses array-based operations for performance with large datasets
+' - Implements dependency injection for the logger component
+' - Includes comprehensive error handling
 
-' Define result types for return values
-Public Type BalanceSummary
-    TotalAmount As Currency
-    User1Share As Currency
-    User2Share As Currency
-    User1Paid As Currency
-    User2Paid As Currency
-    NetBalance As Currency  ' Positive: User1 owes User2, Negative: User2 owes User1
-    WhoOwes As String
-    OwedAmount As Currency
-End Type
+' Interface implementation
+Implements IBalanceCalculator
 
-Public Type CategorySummary
-    Category As String
-    TotalAmount As Currency
-    Percentage As Double
-End Type
+' Private member variables
+Private m_Logger As IErrorLogger
+Private m_IsInitialized As Boolean
+Private m_User1 As String
+Private m_User2 As String
 
-Public Type MonthSummary
-    MonthDate As Date
-    TotalAmount As Currency
-    TransactionCount As Long
-End Type
+'=========================================================================
+' Initialization
+'=========================================================================
 
-Public Type DayOfWeekSummary
-    DayName As String
-    DayNumber As Integer
-    TotalAmount As Currency
-    TransactionCount As Long
-End Type
+Private Sub Class_Initialize()
+    ' Set default values
+    m_IsInitialized = False
+    
+    ' Get user names from settings (with defaults)
+    m_User1 = GetSetting("BALANCE", "Settings", "User1", "User 1")
+    m_User2 = GetSetting("BALANCE", "Settings", "User2", "User 2")
+End Sub
 
-' ===== Balance Calculation =====
-
-' Calculate balance summary from a collection of transactions
-Public Function CalculateBalance(transactions As Collection) As BalanceSummary
+' Initialize the calculator with dependencies
+Private Sub IBalanceCalculator_Initialize(Optional ByVal logger As IErrorLogger = Nothing)
     On Error GoTo ErrorHandler
     
-    Dim result As BalanceSummary
-    Dim trans As Transaction
-    Dim user1Amount As Currency
-    Dim user2Amount As Currency
+    ' Set logger if provided
+    If Not logger Is Nothing Then
+        Set m_Logger = logger
+    End If
     
-    ' Initialize result
-    result.TotalAmount = 0
-    result.User1Share = 0
-    result.User2Share = 0
-    result.User1Paid = 0
-    result.User2Paid = 0
-    result.NetBalance = 0
-    result.WhoOwes = ""
-    result.OwedAmount = 0
+    ' Log initialization
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo "BalanceCalculator.Initialize", "Balance Calculator initialized"
+    End If
     
-    ' Process each transaction
-    For Each trans In transactions
-        ' Update total amount (use negative for expenses, positive for income)
-        result.TotalAmount = result.TotalAmount + trans.Amount
-        
-        ' Calculate split
-        trans.CalculateSplit user1Amount, user2Amount
-        
-        ' Update shares
-        result.User1Share = result.User1Share + user1Amount
-        result.User2Share = result.User2Share + user2Amount
-        
-        ' Update paid amounts
-        If LCase(trans.Owner) = LCase(AppSettings.User1Name) Then
-            result.User1Paid = result.User1Paid + Abs(trans.Amount)
-        Else
-            result.User2Paid = result.User2Paid + Abs(trans.Amount)
-        End If
-    Next trans
+    m_IsInitialized = True
     
-    ' Calculate net balance (positive: User1 owes User2, negative: User2 owes User1)
-    result.NetBalance = result.User1Share - result.User2Share
+    Exit Sub
+    
+ErrorHandler:
+    ' Can't use logger here if that's what caused the error
+    If Not (m_Logger Is Nothing) And Err.Source <> "m_Logger" Then
+        m_Logger.LogError "BalanceCalculator.Initialize", Err.Number, Err.Description
+    End If
+End Sub
+
+' Public wrapper for Initialize
+Public Sub Initialize(Optional ByVal logger As IErrorLogger = Nothing)
+    IBalanceCalculator_Initialize logger
+End Sub
+
+'=========================================================================
+' Interface Implementation - Balance Calculations
+'=========================================================================
+
+' Calculate the overall balance between users
+Private Function IBalanceCalculator_CalculateBalance(ByVal transactions As Collection) As Double
+    On Error GoTo ErrorHandler
+    
+    ' Ensure calculator is initialized
+    If Not m_IsInitialized Then IBalanceCalculator_Initialize
+    
+    ' Convert transactions to array for faster processing
+    Dim transArray() As Variant
+    transArray = TransactionsToArray(transactions)
+    
+    ' Calculate balance using array operations
+    Dim balance As Double
+    balance = CalculateBalanceFromArray(transArray)
+    
+    IBalanceCalculator_CalculateBalance = balance
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.CalculateBalance", Err.Number, Err.Description
+    End If
+    IBalanceCalculator_CalculateBalance = 0
+End Function
+
+' Public wrapper for CalculateBalance
+Public Function CalculateBalance(ByVal transactions As Collection) As Double
+    CalculateBalance = IBalanceCalculator_CalculateBalance(transactions)
+End Function
+
+' Calculate who owes whom and how much
+Private Function IBalanceCalculator_CalculateBalanceSummary(ByVal transactions As Collection) As Object
+    On Error GoTo ErrorHandler
+    
+    ' Ensure calculator is initialized
+    If Not m_IsInitialized Then IBalanceCalculator_Initialize
+    
+    ' Create dictionary for results
+    Dim result As Object
+    Set result = CreateObject("Scripting.Dictionary")
+    
+    ' Convert transactions to array for faster processing
+    Dim transArray() As Variant
+    transArray = TransactionsToArray(transactions)
+    
+    ' Calculate balance
+    Dim balance As Double
+    balance = CalculateBalanceFromArray(transArray)
     
     ' Determine who owes whom
-    If Abs(result.NetBalance) < 0.01 Then
-        result.WhoOwes = "No one owes anything"
-        result.OwedAmount = 0
-    ElseIf result.NetBalance > 0 Then
-        result.WhoOwes = AppSettings.User1Name & " owes " & AppSettings.User2Name
-        result.OwedAmount = result.NetBalance
+    Dim owes As String, owed As String
+    Dim amount As Double
+    
+    amount = Abs(balance)
+    
+    If balance > 0 Then
+        ' User1 owes User2
+        owes = m_User1
+        owed = m_User2
+    ElseIf balance < 0 Then
+        ' User2 owes User1
+        owes = m_User2
+        owed = m_User1
     Else
-        result.WhoOwes = AppSettings.User2Name & " owes " & AppSettings.User1Name
-        result.OwedAmount = Abs(result.NetBalance)
+        ' Balance is even
+        owes = ""
+        owed = ""
     End If
     
-    CalculateBalance = result
+    ' Build result dictionary
+    result.Add "Balance", balance
+    result.Add "OwedAmount", amount
+    result.Add "OwingUser", owes
+    result.Add "OwedUser", owed
+    result.Add "User1", m_User1
+    result.Add "User2", m_User2
+    result.Add "User1Spent", GetUserSpentAmount(transArray, m_User1)
+    result.Add "User2Spent", GetUserSpentAmount(transArray, m_User2)
+    result.Add "TotalShared", GetTotalSharedAmount(transArray)
+    result.Add "TotalSpent", GetTotalSpentAmount(transArray)
+    
+    Set IBalanceCalculator_CalculateBalanceSummary = result
     
     Exit Function
     
 ErrorHandler:
-    ErrorLogger.LogError "BalanceCalculator.CalculateBalance", Err.Number, Err.Description
-    ' Return the initialized result structure in case of error
-    CalculateBalance = result
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.CalculateBalanceSummary", Err.Number, Err.Description
+    End If
+    
+    ' Return empty dictionary on error
+    Set result = CreateObject("Scripting.Dictionary")
+    Set IBalanceCalculator_CalculateBalanceSummary = result
 End Function
 
-' ===== Category Analysis =====
+' Public wrapper for CalculateBalanceSummary
+Public Function CalculateBalanceSummary(ByVal transactions As Collection) As Object
+    Set CalculateBalanceSummary = IBalanceCalculator_CalculateBalanceSummary(transactions)
+End Function
 
-' Get spending by category
-Public Function GetCategorySummary(transactions As Collection, Optional topCount As Long = 8) As Collection
+' Calculate spending by category
+Private Function IBalanceCalculator_CalculateCategorySummary(ByVal transactions As Collection, _
+                                                           Optional ByVal startDate As Date, _
+                                                           Optional ByVal endDate As Date) As Object
     On Error GoTo ErrorHandler
     
-    Dim result As New Collection
-    Dim categoryDict As Object
-    Set categoryDict = CreateObject("Scripting.Dictionary")
-    Dim totalExpenses As Currency
+    ' Ensure calculator is initialized
+    If Not m_IsInitialized Then IBalanceCalculator_Initialize
     
+    ' Use current date range if not specified
+    If startDate = 0 Then startDate = DateSerial(Year(Date) - 1, Month(Date), 1)
+    If endDate = 0 Then endDate = Date
+    
+    ' Create dictionary for results
+    Dim result As Object
+    Set result = CreateObject("Scripting.Dictionary")
+    
+    ' Convert transactions to array for faster processing
+    Dim transArray() As Variant
+    transArray = TransactionsToArray(transactions)
+    
+    ' Filter transactions by date range
+    Dim filteredArray() As Variant
+    filteredArray = FilterTransactionsByDate(transArray, startDate, endDate)
+    
+    ' Calculate category totals
+    result = CalculateCategoryTotalsFromArray(filteredArray)
+    
+    ' Calculate percentages
+    Dim totalSpent As Double
+    totalSpent = GetTotalSpentAmount(filteredArray)
+    
+    Dim category As Variant
+    For Each category In result.Keys
+        Dim categoryAmount As Double
+        categoryAmount = result(category)
+        
+        ' Add percentage to the dictionary with a different key
+        If totalSpent > 0 Then
+            result.Add category & "_Percent", Round(categoryAmount / totalSpent * 100, 2)
+        Else
+            result.Add category & "_Percent", 0
+        End If
+    Next category
+    
+    ' Add total to the results
+    result.Add "Total", totalSpent
+    
+    Set IBalanceCalculator_CalculateCategorySummary = result
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.CalculateCategorySummary", Err.Number, Err.Description
+    End If
+    
+    ' Return empty dictionary on error
+    Set result = CreateObject("Scripting.Dictionary")
+    Set IBalanceCalculator_CalculateCategorySummary = result
+End Function
+
+' Public wrapper for CalculateCategorySummary
+Public Function CalculateCategorySummary(ByVal transactions As Collection, _
+                                       Optional ByVal startDate As Date, _
+                                       Optional ByVal endDate As Date) As Object
+    Set CalculateCategorySummary = IBalanceCalculator_CalculateCategorySummary(transactions, startDate, endDate)
+End Function
+
+' Calculate spending by day of week
+Private Function IBalanceCalculator_CalculateDayOfWeekSummary(ByVal transactions As Collection, _
+                                                             Optional ByVal startDate As Date, _
+                                                             Optional ByVal endDate As Date) As Object
+    On Error GoTo ErrorHandler
+    
+    ' Ensure calculator is initialized
+    If Not m_IsInitialized Then IBalanceCalculator_Initialize
+    
+    ' Use current date range if not specified
+    If startDate = 0 Then startDate = DateSerial(Year(Date) - 1, Month(Date), 1)
+    If endDate = 0 Then endDate = Date
+    
+    ' Create dictionary for results
+    Dim result As Object
+    Set result = CreateObject("Scripting.Dictionary")
+    
+    ' Initialize day of week counters
+    Dim i As Integer
+    For i = 1 To 7
+        result.Add WeekdayName(i, True), 0
+    Next i
+    
+    ' Convert transactions to array for faster processing
+    Dim transArray() As Variant
+    transArray = TransactionsToArray(transactions)
+    
+    ' Filter transactions by date range
+    Dim filteredArray() As Variant
+    filteredArray = FilterTransactionsByDate(transArray, startDate, endDate)
+    
+    ' Calculate day of week totals
+    Dim rowCount As Long
+    rowCount = UBound(filteredArray, 1)
+    
+    For i = 1 To rowCount
+        Dim transDate As Date
+        transDate = filteredArray(i, 2) ' Date is in column 2
+        
+        Dim transAmount As Double
+        transAmount = filteredArray(i, 5) ' Amount is in column 5
+        
+        Dim dayName As String
+        dayName = WeekdayName(Weekday(transDate), True)
+        
+        ' Only count expenses (negative amounts)
+        If transAmount < 0 Then
+            result(dayName) = result(dayName) + Abs(transAmount)
+        End If
+    Next i
+    
+    ' Calculate total spending
+    Dim totalSpent As Double
+    totalSpent = 0
+    
+    For i = 1 To 7
+        Dim dayOfWeek As String
+        dayOfWeek = WeekdayName(i, True)
+        
+        totalSpent = totalSpent + result(dayOfWeek)
+    Next i
+    
+    ' Calculate percentages
+    For i = 1 To 7
+        dayOfWeek = WeekdayName(i, True)
+        
+        ' Add percentage to the dictionary with a different key
+        If totalSpent > 0 Then
+            result.Add dayOfWeek & "_Percent", Round(result(dayOfWeek) / totalSpent * 100, 2)
+        Else
+            result.Add dayOfWeek & "_Percent", 0
+        End If
+    Next i
+    
+    ' Add total to the results
+    result.Add "Total", totalSpent
+    
+    Set IBalanceCalculator_CalculateDayOfWeekSummary = result
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.CalculateDayOfWeekSummary", Err.Number, Err.Description
+    End If
+    
+    ' Return empty dictionary on error
+    Set result = CreateObject("Scripting.Dictionary")
+    Set IBalanceCalculator_CalculateDayOfWeekSummary = result
+End Function
+
+' Public wrapper for CalculateDayOfWeekSummary
+Public Function CalculateDayOfWeekSummary(ByVal transactions As Collection, _
+                                        Optional ByVal startDate As Date, _
+                                        Optional ByVal endDate As Date) As Object
+    Set CalculateDayOfWeekSummary = IBalanceCalculator_CalculateDayOfWeekSummary(transactions, startDate, endDate)
+End Function
+
+' Calculate spending by month
+Private Function IBalanceCalculator_CalculateMonthSummary(ByVal transactions As Collection, _
+                                                        Optional ByVal monthCount As Integer = 12) As Object
+    On Error GoTo ErrorHandler
+    
+    ' Ensure calculator is initialized
+    If Not m_IsInitialized Then IBalanceCalculator_Initialize
+    
+    ' Create dictionary for results
+    Dim result As Object
+    Set result = CreateObject("Scripting.Dictionary")
+    
+    ' Determine date range
+    Dim endDate As Date
+    endDate = DateSerial(Year(Date), Month(Date) + 1, 0) ' Last day of current month
+    
+    Dim startDate As Date
+    startDate = DateSerial(Year(endDate) - Int(monthCount / 12), Month(endDate) - (monthCount Mod 12), 1)
+    If Month(endDate) - (monthCount Mod 12) <= 0 Then
+        startDate = DateSerial(Year(endDate) - Int(monthCount / 12) - 1, Month(endDate) - (monthCount Mod 12) + 12, 1)
+    End If
+    
+    ' Initialize month counters
+    Dim currentDate As Date
+    currentDate = startDate
+    
+    Do While DateDiff("m", currentDate, endDate) >= 0
+        Dim monthKey As String
+        monthKey = Format(currentDate, "yyyy-mm")
+        
+        result.Add monthKey, 0
+        result.Add monthKey & "_Income", 0
+        result.Add monthKey & "_Expense", 0
+        
+        currentDate = DateAdd("m", 1, currentDate)
+    Loop
+    
+    ' Convert transactions to array for faster processing
+    Dim transArray() As Variant
+    transArray = TransactionsToArray(transactions)
+    
+    ' Filter transactions by date range
+    Dim filteredArray() As Variant
+    filteredArray = FilterTransactionsByDate(transArray, startDate, endDate)
+    
+    ' Calculate monthly totals
+    Dim i As Long
+    Dim rowCount As Long
+    rowCount = UBound(filteredArray, 1)
+    
+    For i = 1 To rowCount
+        Dim transDate As Date
+        transDate = filteredArray(i, 2) ' Date is in column 2
+        
+        Dim transAmount As Double
+        transAmount = filteredArray(i, 5) ' Amount is in column 5
+        
+        monthKey = Format(transDate, "yyyy-mm")
+        
+        ' Only process transactions in our result months
+        If result.Exists(monthKey) Then
+            ' Update net amount
+            result(monthKey) = result(monthKey) + transAmount
+            
+            ' Update income or expense
+            If transAmount > 0 Then
+                result(monthKey & "_Income") = result(monthKey & "_Income") + transAmount
+            Else
+                result(monthKey & "_Expense") = result(monthKey & "_Expense") + Abs(transAmount)
+            End If
+        End If
+    Next i
+    
+    Set IBalanceCalculator_CalculateMonthSummary = result
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.CalculateMonthSummary", Err.Number, Err.Description
+    End If
+    
+    ' Return empty dictionary on error
+    Set result = CreateObject("Scripting.Dictionary")
+    Set IBalanceCalculator_CalculateMonthSummary = result
+End Function
+
+' Public wrapper for CalculateMonthSummary
+Public Function CalculateMonthSummary(ByVal transactions As Collection, _
+                                    Optional ByVal monthCount As Integer = 12) As Object
+    Set CalculateMonthSummary = IBalanceCalculator_CalculateMonthSummary(transactions, monthCount)
+End Function
+
+' Calculate daily average spending
+Private Function IBalanceCalculator_CalculateDailyAverageSpending(ByVal transactions As Collection, _
+                                                                 Optional ByVal startDate As Date, _
+                                                                 Optional ByVal endDate As Date) As Double
+    On Error GoTo ErrorHandler
+    
+    ' Ensure calculator is initialized
+    If Not m_IsInitialized Then IBalanceCalculator_Initialize
+    
+    ' Use current date range if not specified
+    If startDate = 0 Then startDate = DateSerial(Year(Date) - 1, Month(Date), 1)
+    If endDate = 0 Then endDate = Date
+    
+    ' Convert transactions to array for faster processing
+    Dim transArray() As Variant
+    transArray = TransactionsToArray(transactions)
+    
+    ' Filter transactions by date range
+    Dim filteredArray() As Variant
+    filteredArray = FilterTransactionsByDate(transArray, startDate, endDate)
+    
+    ' Calculate total expenses (negative amounts)
+    Dim totalExpenses As Double
     totalExpenses = 0
     
-    ' Group by category
-    Dim trans As Transaction
-    For Each trans In transactions
-        ' Only include expenses
-        If trans.IsExpense() Then
-            Dim category As String
-            Dim amount As Currency
-            
-            ' Get category name (use "Uncategorized" if empty)
-            category = IIf(Len(trans.Category) > 0, trans.Category, "Uncategorized")
-            
-            ' Get absolute amount (positive value)
-            amount = trans.GetAbsoluteAmount()
-            
-            ' Add to total
-            totalExpenses = totalExpenses + amount
-            
-            ' Add or update category
-            If categoryDict.Exists(category) Then
-                categoryDict(category) = categoryDict(category) + amount
-            Else
-                categoryDict.Add category, amount
-            End If
-        End If
-    Next trans
-    
-    ' Convert to array for sorting
-    Dim categories() As String
-    Dim amounts() As Currency
     Dim i As Long
+    Dim rowCount As Long
+    rowCount = UBound(filteredArray, 1)
     
-    ReDim categories(1 To categoryDict.Count)
-    ReDim amounts(1 To categoryDict.Count)
-    
-    i = 1
-    Dim key As Variant
-    For Each key In categoryDict.Keys
-        categories(i) = key
-        amounts(i) = categoryDict(key)
-        i = i + 1
-    Next key
-    
-    ' Sort by amount (using QuickSort instead of bubble sort for better performance)
-    QuickSortCategories categories, amounts, 1, UBound(categories)
-    
-    ' Create category summaries
-    Dim displayCount As Long
-    Dim otherAmount As Currency
-    
-    ' Determine how many categories to display
-    displayCount = WorksheetFunction.Min(topCount, UBound(categories))
-    
-    ' Add top categories
-    For i = 1 To displayCount
-        Dim catSummary As CategorySummary
+    For i = 1 To rowCount
+        Dim transAmount As Double
+        transAmount = filteredArray(i, 5) ' Amount is in column 5
         
-        catSummary.Category = categories(i)
-        catSummary.TotalAmount = amounts(i)
-        
-        ' Calculate percentage (handle division by zero)
-        If totalExpenses > 0 Then
-            catSummary.Percentage = amounts(i) / totalExpenses
-        Else
-            catSummary.Percentage = 0
+        ' Only count expenses (negative amounts)
+        If transAmount < 0 Then
+            totalExpenses = totalExpenses + Abs(transAmount)
         End If
-        
-        ' Add to result
-        result.Add catSummary
     Next i
     
-    ' Add "Other" category if needed
-    If UBound(categories) > displayCount Then
-        Dim otherSummary As CategorySummary
-        
-        otherSummary.Category = "Other Categories"
-        otherSummary.TotalAmount = 0
-        
-        ' Sum the remaining categories
-        For i = displayCount + 1 To UBound(categories)
-            otherSummary.TotalAmount = otherSummary.TotalAmount + amounts(i)
-        Next i
-        
-        ' Calculate percentage
-        If totalExpenses > 0 Then
-            otherSummary.Percentage = otherSummary.TotalAmount / totalExpenses
-        Else
-            otherSummary.Percentage = 0
-        End If
-        
-        ' Add to result
-        result.Add otherSummary
+    ' Calculate number of days in date range
+    Dim dayCount As Integer
+    dayCount = DateDiff("d", startDate, endDate) + 1
+    
+    ' Calculate daily average
+    Dim dailyAverage As Double
+    If dayCount > 0 Then
+        dailyAverage = totalExpenses / dayCount
+    Else
+        dailyAverage = 0
     End If
     
-    Set GetCategorySummary = result
-    
-    ' Clean up
-    Set categoryDict = Nothing
+    IBalanceCalculator_CalculateDailyAverageSpending = dailyAverage
     
     Exit Function
     
 ErrorHandler:
-    ErrorLogger.LogError "BalanceCalculator.GetCategorySummary", Err.Number, Err.Description
-    Set GetCategorySummary = New Collection ' Return empty collection in case of error
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.CalculateDailyAverageSpending", Err.Number, Err.Description
+    End If
+    IBalanceCalculator_CalculateDailyAverageSpending = 0
 End Function
 
-' QuickSort algorithm for categories (much faster than bubble sort)
-Private Sub QuickSortCategories(ByRef categories() As String, ByRef amounts() As Currency, ByVal low As Long, ByVal high As Long)
+' Public wrapper for CalculateDailyAverageSpending
+Public Function CalculateDailyAverageSpending(ByVal transactions As Collection, _
+                                             Optional ByVal startDate As Date, _
+                                             Optional ByVal endDate As Date) As Double
+    CalculateDailyAverageSpending = IBalanceCalculator_CalculateDailyAverageSpending(transactions, startDate, endDate)
+End Function
+
+' Calculate spending trends (month-over-month changes)
+Private Function IBalanceCalculator_CalculateSpendingTrends(ByVal transactions As Collection, _
+                                                           Optional ByVal monthCount As Integer = 12) As Object
     On Error GoTo ErrorHandler
     
-    Dim pivot As Currency
-    Dim tempAmount As Currency
-    Dim tempCategory As String
-    Dim i As Long, j As Long
+    ' Ensure calculator is initialized
+    If Not m_IsInitialized Then IBalanceCalculator_Initialize
     
-    If low < high Then
-        pivot = amounts((low + high) \ 2)
-        i = low
-        j = high
-        
-        Do
-            Do While amounts(i) > pivot
-                i = i + 1
-            Loop
-            
-            Do While amounts(j) < pivot
-                j = j - 1
-            Loop
-            
-            If i <= j Then
-                ' Swap amounts
-                tempAmount = amounts(i)
-                amounts(i) = amounts(j)
-                amounts(j) = tempAmount
-                
-                ' Swap categories
-                tempCategory = categories(i)
-                categories(i) = categories(j)
-                categories(j) = tempCategory
-                
-                i = i + 1
-                j = j - 1
-            End If
-        Loop Until i > j
-        
-        If low < j Then QuickSortCategories categories, amounts, low, j
-        If i < high Then QuickSortCategories categories, amounts, i, high
+    ' Create dictionary for results
+    Dim result As Object
+    Set result = CreateObject("Scripting.Dictionary")
+    
+    ' Get monthly summary
+    Dim monthSummary As Object
+    Set monthSummary = IBalanceCalculator_CalculateMonthSummary(transactions, monthCount)
+    
+    ' Calculate month-over-month changes
+    Dim months As Collection
+    Set months = GetSortedKeys(monthSummary)
+    
+    Dim i As Long
+    Dim monthCount As Long
+    monthCount = months.Count
+    
+    ' Need at least 2 months to calculate trends
+    If monthCount < 2 Then
+        Set IBalanceCalculator_CalculateSpendingTrends = result
+        Exit Function
     End If
     
-    Exit Sub
+    ' Calculate change for each month after the first
+    For i = 2 To monthCount
+        Dim currentMonth As String
+        currentMonth = months(i)
+        
+        Dim previousMonth As String
+        previousMonth = months(i - 1)
+        
+        ' Check if keys exist
+        If monthSummary.Exists(currentMonth & "_Expense") And monthSummary.Exists(previousMonth & "_Expense") Then
+            Dim currentExpense As Double
+            currentExpense = monthSummary(currentMonth & "_Expense")
+            
+            Dim previousExpense As Double
+            previousExpense = monthSummary(previousMonth & "_Expense")
+            
+            Dim changeAmount As Double
+            changeAmount = currentExpense - previousExpense
+            
+            Dim changePercent As Double
+            If previousExpense > 0 Then
+                changePercent = Round(changeAmount / previousExpense * 100, 2)
+            Else
+                changePercent = 0
+            End If
+            
+            ' Add to results
+            result.Add currentMonth & "_Change", changeAmount
+            result.Add currentMonth & "_ChangePercent", changePercent
+        End If
+    Next i
+    
+    Set IBalanceCalculator_CalculateSpendingTrends = result
+    
+    Exit Function
     
 ErrorHandler:
-    ErrorLogger.LogError "BalanceCalculator.QuickSortCategories", Err.Number, Err.Description
-End Sub
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.CalculateSpendingTrends", Err.Number, Err.Description
+    End If
+    
+    ' Return empty dictionary on error
+    Set result = CreateObject("Scripting.Dictionary")
+    Set IBalanceCalculator_CalculateSpendingTrends = result
+End Function
 
-' ===== Monthly Analysis =====
+' Public wrapper for CalculateSpendingTrends
+Public Function CalculateSpendingTrends(ByVal transactions As Collection, _
+                                      Optional ByVal monthCount As Integer = 12) As Object
+    Set CalculateSpendingTrends = IBalanceCalculator_CalculateSpendingTrends(transactions, monthCount)
+End Function
 
-' Get monthly spending summary
-Public Function GetMonthlySummary(transactions As Collection, Optional months As Long = 6) As Collection
+'=========================================================================
+' Helper Methods - Array Operations
+'=========================================================================
+
+' Convert transactions collection to array for faster processing
+Private Function TransactionsToArray(ByVal transactions As Collection) As Variant
     On Error GoTo ErrorHandler
     
-    Dim result As New Collection
-    Dim monthDict As Object
-    Set monthDict = CreateObject("Scripting.Dictionary")
+    Dim transCount As Long
+    transCount = transactions.Count
     
-    ' Group by month
-    Dim trans As Transaction
-    For Each trans In transactions
-        ' Only include expenses
-        If trans.IsExpense() Then
-            Dim monthKey As String
-            Dim monthDate As Date
-            Dim amount As Currency
-            
-            ' Get first day of month
-            monthDate = DateSerial(Year(trans.TransactionDate), Month(trans.TransactionDate), 1)
-            monthKey = Format(monthDate, "yyyy-mm")
-            
-            ' Get absolute amount
-            amount = trans.GetAbsoluteAmount()
-            
-            ' Add or update month
-            If monthDict.Exists(monthKey) Then
-                monthDict(monthKey)(0) = monthDict(monthKey)(0) + amount  ' Sum
-                monthDict(monthKey)(1) = monthDict(monthKey)(1) + 1       ' Count
-                monthDict(monthKey)(2) = monthDate                        ' Date
-            Else
-                Dim newMonth(0 To 2) As Variant
-                newMonth(0) = amount  ' Sum
-                newMonth(1) = 1       ' Count
-                newMonth(2) = monthDate  ' Date
-                monthDict.Add monthKey, newMonth
-            End If
-        End If
-    Next trans
+    ' If no transactions, return empty array
+    If transCount = 0 Then
+        TransactionsToArray = Array()
+        Exit Function
+    End If
     
-    ' Sort months chronologically (newest first)
-    Dim sortedMonths() As String
-    ReDim sortedMonths(1 To monthDict.Count)
+    ' Create array with specific structure:
+    ' Column 1: ID
+    ' Column 2: Date
+    ' Column 3: Merchant
+    ' Column 4: Category
+    ' Column 5: Amount
+    ' Column 6: Account
+    ' Column 7: Owner
+    ' Column 8: IsShared
+    ' Column 9: Notes
+    ' Column 10: SourceFile
+    Dim result() As Variant
+    ReDim result(1 To transCount, 1 To 10)
     
     Dim i As Long
     i = 1
-    Dim key As Variant
-    For Each key In monthDict.Keys
-        sortedMonths(i) = key
-        i = i + 1
-    Next key
     
-    ' Sort (using QuickSort for better performance)
-    QuickSortMonths sortedMonths, 1, UBound(sortedMonths)
-    
-    ' Create month summaries (most recent first)
-    Dim displayMonths As Long
-    displayMonths = WorksheetFunction.Min(months, UBound(sortedMonths))
-    
-    For i = 1 To displayMonths
-        Dim monthSummary As MonthSummary
-        Dim monthKey As String
-        
-        monthKey = sortedMonths(i)
-        
-        monthSummary.MonthDate = monthDict(monthKey)(2)
-        monthSummary.TotalAmount = monthDict(monthKey)(0)
-        monthSummary.TransactionCount = monthDict(monthKey)(1)
-        
-        ' Add to result
-        result.Add monthSummary
-    Next i
-    
-    Set GetMonthlySummary = result
-    
-    ' Clean up
-    Set monthDict = Nothing
-    
-    Exit Function
-    
-ErrorHandler:
-    ErrorLogger.LogError "BalanceCalculator.GetMonthlySummary", Err.Number, Err.Description
-    Set GetMonthlySummary = New Collection ' Return empty collection in case of error
-End Function
-
-' QuickSort algorithm for months (descending order - newest first)
-Private Sub QuickSortMonths(ByRef months() As String, ByVal low As Long, ByVal high As Long)
-    On Error GoTo ErrorHandler
-    
-    Dim pivot As String
-    Dim temp As String
-    Dim i As Long, j As Long
-    
-    If low < high Then
-        pivot = months((low + high) \ 2)
-        i = low
-        j = high
-        
-        Do
-            Do While months(i) > pivot
-                i = i + 1
-            Loop
-            
-            Do While months(j) < pivot
-                j = j - 1
-            Loop
-            
-            If i <= j Then
-                ' Swap months
-                temp = months(i)
-                months(i) = months(j)
-                months(j) = temp
-                
-                i = i + 1
-                j = j - 1
-            End If
-        Loop Until i > j
-        
-        If low < j Then QuickSortMonths months, low, j
-        If i < high Then QuickSortMonths months, i, high
-    End If
-    
-    Exit Sub
-    
-ErrorHandler:
-    ErrorLogger.LogError "BalanceCalculator.QuickSortMonths", Err.Number, Err.Description
-End Sub
-
-' ===== Day of Week Analysis =====
-
-' Get spending by day of week
-Public Function GetDayOfWeekSummary(transactions As Collection) As Collection
-    On Error GoTo ErrorHandler
-    
-    Dim result As New Collection
-    Dim dayDict As Object
-    Set dayDict = CreateObject("Scripting.Dictionary")
-    
-    ' Initialize all days to zero
-    Dim days As Variant
-    days = Array("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
-    Dim i As Long
-    
-    For i = 0 To 6
-        Dim newDay(0 To 1) As Currency
-        newDay(0) = 0  ' Sum
-        newDay(1) = 0  ' Count
-        dayDict.Add days(i), newDay
-    Next i
-    
-    ' Group by day of week
     Dim trans As Transaction
     For Each trans In transactions
-        ' Only include expenses
-        If trans.IsExpense() Then
-            Dim dayName As String
-            Dim amount As Currency
-            
-            ' Get day of week name
-            dayName = Format(trans.TransactionDate, "dddd")
-            
-            ' Get absolute amount
-            amount = trans.GetAbsoluteAmount()
-            
-            ' Update day data
-            dayDict(dayName)(0) = dayDict(dayName)(0) + amount  ' Sum
-            dayDict(dayName)(1) = dayDict(dayName)(1) + 1       ' Count
-        End If
+        result(i, 1) = trans.ID
+        result(i, 2) = trans.TransactionDate
+        result(i, 3) = trans.Merchant
+        result(i, 4) = trans.Category
+        result(i, 5) = trans.Amount
+        result(i, 6) = trans.Account
+        result(i, 7) = trans.Owner
+        result(i, 8) = trans.IsShared
+        result(i, 9) = trans.Notes
+        result(i, 10) = trans.SourceFile
+        
+        i = i + 1
     Next trans
     
-    ' Create day summaries (in order of day of week)
-    For i = 0 To 6
-        Dim daySummary As DayOfWeekSummary
-        Dim dayName As String
-        
-        dayName = days(i)
-        
-        daySummary.DayName = dayName
-        daySummary.DayNumber = i
-        daySummary.TotalAmount = dayDict(dayName)(0)
-        daySummary.TransactionCount = dayDict(dayName)(1)
-        
-        ' Add to result
-        result.Add daySummary
-    Next i
-    
-    Set GetDayOfWeekSummary = result
-    
-    ' Clean up
-    Set dayDict = Nothing
+    TransactionsToArray = result
     
     Exit Function
     
 ErrorHandler:
-    ErrorLogger.LogError "BalanceCalculator.GetDayOfWeekSummary", Err.Number, Err.Description
-    Set GetDayOfWeekSummary = New Collection ' Return empty collection in case of error
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.TransactionsToArray", Err.Number, Err.Description
+    End If
+    TransactionsToArray = Array()
 End Function
 
-' Class initialize
-Private Sub Class_Initialize()
-    ' Nothing needed here
-End Sub
+' Calculate balance from transaction array
+Private Function CalculateBalanceFromArray(ByVal transArray As Variant) As Double
+    On Error GoTo ErrorHandler
+    
+    ' Check if array is empty
+    If Not IsArray(transArray) Then
+        CalculateBalanceFromArray = 0
+        Exit Function
+    End If
+    
+    Dim rowCount As Long
+    On Error Resume Next
+    rowCount = UBound(transArray, 1)
+    On Error GoTo ErrorHandler
+    
+    If rowCount = 0 Then
+        CalculateBalanceFromArray = 0
+        Exit Function
+    End If
+    
+    ' Track share of each user
+    Dim user1Amount As Double
+    Dim user2Amount As Double
+    
+    user1Amount = 0
+    user2Amount = 0
+    
+    ' Process each transaction
+    Dim i As Long
+    For i = 1 To rowCount
+        Dim transAmount As Double
+        transAmount = transArray(i, 5) ' Amount is in column 5
+        
+        Dim transOwner As String
+        transOwner = transArray(i, 7) ' Owner is in column 7
+        
+        Dim isShared As Boolean
+        isShared = transArray(i, 8) ' IsShared is in column 8
+        
+        ' Handle shared expenses
+        If isShared Then
+            ' If shared, each user bears half the expense regardless of who paid
+            If transAmount < 0 Then ' Expense
+                ' The owner pays the full amount but should only bear half
+                If transOwner = m_User1 Then
+                    user1Amount = user1Amount + (transAmount / 2) ' Half of expense
+                    user2Amount = user2Amount + (transAmount / 2) ' Half of expense
+                ElseIf transOwner = m_User2 Then
+                    user1Amount = user1Amount + (transAmount / 2) ' Half of expense
+                    user2Amount = user2Amount + (transAmount / 2) ' Half of expense
+                End If
+            Else ' Income
+                ' Shared income is split evenly
+                If transOwner = m_User1 Then
+                    user1Amount = user1Amount + (transAmount / 2) ' Half of income
+                    user2Amount = user2Amount + (transAmount / 2) ' Half of income
+                ElseIf transOwner = m_User2 Then
+                    user1Amount = user1Amount + (transAmount / 2) ' Half of income
+                    user2Amount = user2Amount + (transAmount / 2) ' Half of income
+                End If
+            End If
+        Else
+            ' If not shared, only the owner is affected
+            If transOwner = m_User1 Then
+                user1Amount = user1Amount + transAmount
+            ElseIf transOwner = m_User2 Then
+                user2Amount = user2Amount + transAmount
+            End If
+        End If
+    Next i
+    
+    ' Calculate final balance
+    ' A positive balance means User1 owes User2
+    ' A negative balance means User2 owes User1
+    CalculateBalanceFromArray = user1Amount - user2Amount
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.CalculateBalanceFromArray", Err.Number, Err.Description
+    End If
+    CalculateBalanceFromArray = 0
+End Function
 
-' Class terminate
+' Filter transactions by date range
+Private Function FilterTransactionsByDate(ByVal transArray As Variant, _
+                                         ByVal startDate As Date, _
+                                         ByVal endDate As Date) As Variant
+    On Error GoTo ErrorHandler
+    
+    ' Check if array is empty
+    If Not IsArray(transArray) Then
+        FilterTransactionsByDate = Array()
+        Exit Function
+    End If
+    
+    Dim rowCount As Long
+    On Error Resume Next
+    rowCount = UBound(transArray, 1)
+    On Error GoTo ErrorHandler
+    
+    If rowCount = 0 Then
+        FilterTransactionsByDate = Array()
+        Exit Function
+    End If
+    
+    ' Count transactions in date range
+    Dim filterCount As Long
+    filterCount = 0
+    
+    Dim i As Long
+    For i = 1 To rowCount
+        Dim transDate As Date
+        transDate = transArray(i, 2) ' Date is in column 2
+        
+        If transDate >= startDate And transDate <= endDate Then
+            filterCount = filterCount + 1
+        End If
+    Next i
+    
+    ' If no transactions in range, return empty array
+    If filterCount = 0 Then
+        FilterTransactionsByDate = Array()
+        Exit Function
+    End If
+    
+    ' Create filtered array
+    Dim result() As Variant
+    ReDim result(1 To filterCount, 1 To UBound(transArray, 2))
+    
+    Dim resultIndex As Long
+    resultIndex = 1
+    
+    ' Fill filtered array
+    For i = 1 To rowCount
+        transDate = transArray(i, 2) ' Date is in column 2
+        
+        If transDate >= startDate And transDate <= endDate Then
+            ' Copy all columns
+            Dim j As Long
+            For j = 1 To UBound(transArray, 2)
+                result(resultIndex, j) = transArray(i, j)
+            Next j
+            
+            resultIndex = resultIndex + 1
+        End If
+    Next i
+    
+    FilterTransactionsByDate = result
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.FilterTransactionsByDate", Err.Number, Err.Description
+    End If
+    FilterTransactionsByDate = Array()
+End Function
+
+' Calculate category totals from transaction array
+Private Function CalculateCategoryTotalsFromArray(ByVal transArray As Variant) As Object
+    On Error GoTo ErrorHandler
+    
+    ' Create dictionary for results
+    Dim result As Object
+    Set result = CreateObject("Scripting.Dictionary")
+    
+    ' Check if array is empty
+    If Not IsArray(transArray) Then
+        Set CalculateCategoryTotalsFromArray = result
+        Exit Function
+    End If
+    
+    Dim rowCount As Long
+    On Error Resume Next
+    rowCount = UBound(transArray, 1)
+    On Error GoTo ErrorHandler
+    
+    If rowCount = 0 Then
+        Set CalculateCategoryTotalsFromArray = result
+        Exit Function
+    End If
+    
+    ' Process each transaction
+    Dim i As Long
+    For i = 1 To rowCount
+        Dim transCategory As String
+        transCategory = transArray(i, 4) ' Category is in column 4
+        
+        Dim transAmount As Double
+        transAmount = transArray(i, 5) ' Amount is in column 5
+        
+        ' Only count expenses (negative amounts)
+        If transAmount < 0 Then
+            ' Ensure category is not empty
+            If Len(Trim$(transCategory)) = 0 Then
+                transCategory = "Uncategorized"
+            End If
+            
+            ' Update category total
+            If Not result.Exists(transCategory) Then
+                result.Add transCategory, 0
+            End If
+            
+            result(transCategory) = result(transCategory) + Abs(transAmount)
+        End If
+    Next i
+    
+    Set CalculateCategoryTotalsFromArray = result
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.CalculateCategoryTotalsFromArray", Err.Number, Err.Description
+    End If
+    
+    Set result = CreateObject("Scripting.Dictionary")
+    Set CalculateCategoryTotalsFromArray = result
+End Function
+
+' Get amount spent by a specific user
+Private Function GetUserSpentAmount(ByVal transArray As Variant, ByVal userName As String) As Double
+    On Error GoTo ErrorHandler
+    
+    ' Check if array is empty
+    If Not IsArray(transArray) Then
+        GetUserSpentAmount = 0
+        Exit Function
+    End If
+    
+    Dim rowCount As Long
+    On Error Resume Next
+    rowCount = UBound(transArray, 1)
+    On Error GoTo ErrorHandler
+    
+    If rowCount = 0 Then
+        GetUserSpentAmount = 0
+        Exit Function
+    End If
+    
+    ' Calculate amount
+    Dim totalAmount As Double
+    totalAmount = 0
+    
+    ' Process each transaction
+    Dim i As Long
+    For i = 1 To rowCount
+        Dim transOwner As String
+        transOwner = transArray(i, 7) ' Owner is in column 7
+        
+        Dim transAmount As Double
+        transAmount = transArray(i, 5) ' Amount is in column 5
+        
+        ' Only count expenses (negative amounts) for this user
+        If transOwner = userName And transAmount < 0 Then
+            totalAmount = totalAmount + Abs(transAmount)
+        End If
+    Next i
+    
+    GetUserSpentAmount = totalAmount
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.GetUserSpentAmount", Err.Number, Err.Description
+    End If
+    GetUserSpentAmount = 0
+End Function
+
+' Get total amount of shared expenses
+Private Function GetTotalSharedAmount(ByVal transArray As Variant) As Double
+    On Error GoTo ErrorHandler
+    
+    ' Check if array is empty
+    If Not IsArray(transArray) Then
+        GetTotalSharedAmount = 0
+        Exit Function
+    End If
+    
+    Dim rowCount As Long
+    On Error Resume Next
+    rowCount = UBound(transArray, 1)
+    On Error GoTo ErrorHandler
+    
+    If rowCount = 0 Then
+        GetTotalSharedAmount = 0
+        Exit Function
+    End If
+    
+    ' Calculate amount
+    Dim totalAmount As Double
+    totalAmount = 0
+    
+    ' Process each transaction
+    Dim i As Long
+    For i = 1 To rowCount
+        Dim isShared As Boolean
+        isShared = transArray(i, 8) ' IsShared is in column 8
+        
+        Dim transAmount As Double
+        transAmount = transArray(i, 5) ' Amount is in column 5
+        
+        ' Only count shared expenses (negative amounts)
+        If isShared And transAmount < 0 Then
+            totalAmount = totalAmount + Abs(transAmount)
+        End If
+    Next i
+    
+    GetTotalSharedAmount = totalAmount
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.GetTotalSharedAmount", Err.Number, Err.Description
+    End If
+    GetTotalSharedAmount = 0
+End Function
+
+' Get total amount spent
+Private Function GetTotalSpentAmount(ByVal transArray As Variant) As Double
+    On Error GoTo ErrorHandler
+    
+    ' Check if array is empty
+    If Not IsArray(transArray) Then
+        GetTotalSpentAmount = 0
+        Exit Function
+    End If
+    
+    Dim rowCount As Long
+    On Error Resume Next
+    rowCount = UBound(transArray, 1)
+    On Error GoTo ErrorHandler
+    
+    If rowCount = 0 Then
+        GetTotalSpentAmount = 0
+        Exit Function
+    End If
+    
+    ' Calculate amount
+    Dim totalAmount As Double
+    totalAmount = 0
+    
+    ' Process each transaction
+    Dim i As Long
+    For i = 1 To rowCount
+        Dim transAmount As Double
+        transAmount = transArray(i, 5) ' Amount is in column 5
+        
+        ' Only count expenses (negative amounts)
+        If transAmount < 0 Then
+            totalAmount = totalAmount + Abs(transAmount)
+        End If
+    Next i
+    
+    GetTotalSpentAmount = totalAmount
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.GetTotalSpentAmount", Err.Number, Err.Description
+    End If
+    GetTotalSpentAmount = 0
+End Function
+
+' Get keys from a dictionary, sorted alphabetically
+Private Function GetSortedKeys(ByVal dict As Object) As Collection
+    On Error GoTo ErrorHandler
+    
+    ' Create collection for results
+    Dim result As New Collection
+    
+    ' Get all keys
+    Dim keys() As Variant
+    keys = dict.keys
+    
+    ' Sort keys using bubble sort
+    Dim i As Long, j As Long
+    Dim temp As Variant
+    
+    For i = LBound(keys) To UBound(keys) - 1
+        For j = i + 1 To UBound(keys)
+            If keys(i) > keys(j) Then
+                temp = keys(i)
+                keys(i) = keys(j)
+                keys(j) = temp
+            End If
+        Next j
+    Next i
+    
+    ' Add sorted keys to collection
+    For i = LBound(keys) To UBound(keys)
+        ' Only add keys that are month identifiers (yyyy-mm)
+        If Len(keys(i)) = 7 And Mid$(keys(i), 5, 1) = "-" Then
+            If Not (InStr(1, keys(i), "_") > 0) Then  ' Exclude derived keys
+                result.Add keys(i)
+            End If
+        End If
+    Next i
+    
+    Set GetSortedKeys = result
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "BalanceCalculator.GetSortedKeys", Err.Number, Err.Description
+    End If
+    
+    Set result = New Collection
+    Set GetSortedKeys = result
+End Function
+
+'=========================================================================
+' Properties
+'=========================================================================
+
+' Get/set User1 name
+Public Property Get User1() As String
+    User1 = m_User1
+End Property
+
+Public Property Let User1(ByVal value As String)
+    m_User1 = value
+End Property
+
+' Get/set User2 name
+Public Property Get User2() As String
+    User2 = m_User2
+End Property
+
+Public Property Let User2(ByVal value As String)
+    m_User2 = value
+End Property
+
+'=========================================================================
+' Cleanup
+'=========================================================================
+
 Private Sub Class_Terminate()
-    ' Nothing to clean up
+    ' Clean up object references
+    Set m_Logger = Nothing
 End Sub
