@@ -1,247 +1,161 @@
-' Get transactions filtered by date range
-Public Function GetTransactionsByDateRange(startDate As Date, endDate As Date) As Collection
-    On Error GoTo ErrorHandler
-    
-    If Not m_IsInitialized Then Initialize
-    
-    Dim result As New Collection
-    Dim trans As Transaction
-    
-    For Each trans In m_Transactions
-        If trans.TransactionDate >= startDate And trans.TransactionDate <= endDate Then
-            result.Add trans
-        End If
-    Next trans
-    
-    Set GetTransactionsByDateRange = result
-    
-    Exit Function
-    
-ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.GetTransactionsByDateRange", Err.Number, Err.Description
-    Set GetTransactionsByDateRange = New Collection
-End Function
+' File: src/repositories/TransactionRepository.cls
+'------------------------------------------------
+VERSION 1.0 CLASS
+BEGIN
+  MultiUse = -1  'True
+END
+Attribute VB_Name = "TransactionRepository"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = False
+Option Explicit
 
-' Get transactions filtered by category
-Public Function GetTransactionsByCategory(category As String) As Collection
-    On Error GoTo ErrorHandler
-    
-    If Not m_IsInitialized Then Initialize
-    
-    Dim result As New Collection
-    Dim trans As Transaction
-    
-    For Each trans In m_Transactions
-        If LCase(trans.Category) = LCase(category) Then
-            result.Add trans
-        End If
-    Next trans
-    
-    Set GetTransactionsByCategory = result
-    
-    Exit Function
-    
-ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.GetTransactionsByCategory", Err.Number, Err.Description
-    Set GetTransactionsByCategory = New Collection
-End Function
+' BALANCE - Bilateral Accounting Ledger for Analyzing Networked Couple Expenses
+' TransactionRepository Class - Implements ITransactionRepository
+'
+' Purpose: Provides data storage and retrieval for Transaction objects
+' using Excel Tables (ListObjects) for efficient data operations.
+'
+' Design Decisions:
+' - Uses PredeclaredId = True to enable Singleton pattern
+' - Implements ITransactionRepository for loose coupling
+' - Uses Excel Tables (ListObjects) for structured data storage
+' - Performs batch operations using arrays for performance
+' - Implements dependency injection for the logger component
+' - Uses proper error handling with centralized logging
+' - Publishes events when data changes to support event-driven architecture
 
-' Get transactions filtered by owner
-Public Function GetTransactionsByOwner(owner As String) As Collection
-    On Error GoTo ErrorHandler
-    
-    If Not m_IsInitialized Then Initialize
-    
-    Dim result As New Collection
-    Dim trans As Transaction
-    
-    For Each trans In m_Transactions
-        If LCase(trans.Owner) = LCase(owner) Then
-            result.Add trans
-        End If
-    Next trans
-    
-    Set GetTransactionsByOwner = result
-    
-    Exit Function
-    
-ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.GetTransactionsByOwner", Err.Number, Err.Description
-    Set GetTransactionsByOwner = New Collection
-End Function
+' Interface implementation
+Implements ITransactionRepository
 
-' Get transactions filtered by source file
-Public Function GetTransactionsBySourceFile(sourceFile As String) As Collection
-    On Error GoTo ErrorHandler
-    
-    If Not m_IsInitialized Then Initialize
-    
-    Dim result As New Collection
-    Dim trans As Transaction
-    
-    For Each trans In m_Transactions
-        If LCase(trans.SourceFile) = LCase(sourceFile) Then
-            result.Add trans
-        End If
-    Next trans
-    
-    Set GetTransactionsBySourceFile = result
-    
-    Exit Function
-    
-ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.GetTransactionsBySourceFile", Err.Number, Err.Description
-    Set GetTransactionsBySourceFile = New Collection
-End Function
+' Constants for table and column definitions
+Private Const DATA_SHEET_NAME As String = "TransactionData"
+Private Const TABLE_NAME As String = "TransactionsTable"
+Private Const HEADER_ROW As Long = 1
 
-' Save changes to the data sheet
-Public Sub SaveChanges()
+' Column indices for table
+Private Const COL_ID As Long = 1
+Private Const COL_DATE As Long = 2
+Private Const COL_MERCHANT As Long = 3
+Private Const COL_CATEGORY As Long = 4
+Private Const COL_AMOUNT As Long = 5
+Private Const COL_ACCOUNT As Long = 6
+Private Const COL_OWNER As Long = 7
+Private Const COL_IS_SHARED As Long = 8
+Private Const COL_NOTES As Long = 9
+Private Const COL_SOURCE_FILE As Long = 10
+
+' Private member variables
+Private m_Transactions As Collection  ' Collection of Transaction objects
+Private m_DataSheet As Worksheet      ' Worksheet containing the data
+Private m_DataTable As ListObject     ' Excel Table for structured data storage
+Private m_IsInitialized As Boolean    ' Flag indicating if repository is initialized
+Private m_IsDirty As Boolean          ' Flag indicating unsaved changes
+Private m_Logger As IErrorLogger       ' Error logging component (injected)
+
+'=========================================================================
+' Initialization and Setup
+'=========================================================================
+
+Private Sub Class_Initialize()
+    ' Initialize member variables
+    Set m_Transactions = New Collection
+    m_IsInitialized = False
+    m_IsDirty = False
+End Sub
+
+' Initialize the repository and set up dependencies
+Private Sub ITransactionRepository_Initialize(Optional ByVal logger As IErrorLogger = Nothing)
     On Error GoTo ErrorHandler
     
-    If Not m_IsInitialized Then Initialize
-    
-    ' Only save if there are unsaved changes
-    If Not m_IsDirty Then Exit Sub
-    
-    ' Clear existing data (keeping header)
-    Dim lastRow As Long
-    lastRow = Utilities.GetLastRow(m_DataSheet, 1)
-    
-    If lastRow > HEADER_ROW Then
-        m_DataSheet.Range(m_DataSheet.Cells(HEADER_ROW + 1, 1), m_DataSheet.Cells(lastRow, COL_SOURCE_FILE)).Clear
+    ' Set logger if provided, otherwise get singleton instance
+    If logger Is Nothing Then
+        Set m_Logger = ErrorLogger ' Assume ErrorLogger has a default instance
+    Else
+        Set m_Logger = logger
     End If
     
-    ' Write transactions to sheet
-    Dim trans As Transaction
-    Dim row As Long
+    ' Log initialization start
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo "TransactionRepository.Initialize", "Initializing transaction repository"
+    End If
     
-    row = HEADER_ROW + 1
+    ' Get or create data sheet
+    Set m_DataSheet = GetOrCreateDataSheet()
     
-    For Each trans In m_Transactions
-        ' ID
-        m_DataSheet.Cells(row, COL_ID).Value = trans.ID
-        
-        ' Date
-        m_DataSheet.Cells(row, COL_DATE).Value = trans.TransactionDate
-        m_DataSheet.Cells(row, COL_DATE).NumberFormat = "yyyy-mm-dd"
-        
-        ' Merchant
-        m_DataSheet.Cells(row, COL_MERCHANT).Value = trans.Merchant
-        
-        ' Category
-        m_DataSheet.Cells(row, COL_CATEGORY).Value = trans.Category
-        
-        ' Amount
-        m_DataSheet.Cells(row, COL_AMOUNT).Value = trans.Amount
-        m_DataSheet.Cells(row, COL_AMOUNT).NumberFormat = "_($* #,##0.00_);_($* (#,##0.00);_($* ""-""??_);_(@_)"
-        
-        ' Account
-        m_DataSheet.Cells(row, COL_ACCOUNT).Value = trans.Account
-        
-        ' Owner
-        m_DataSheet.Cells(row, COL_OWNER).Value = trans.Owner
-        
-        ' IsShared
-        m_DataSheet.Cells(row, COL_IS_SHARED).Value = trans.IsShared
-        
-        ' Notes
-        m_DataSheet.Cells(row, COL_NOTES).Value = trans.Notes
-        
-        ' SourceFile
-        m_DataSheet.Cells(row, COL_SOURCE_FILE).Value = trans.SourceFile
-        
-        row = row + 1
-    Next trans
+    ' Get or create data table
+    Set m_DataTable = GetOrCreateDataTable()
     
-    ' Mark as clean (all changes saved)
+    ' Load transactions from table
+    LoadTransactionsFromTable
+    
+    m_IsInitialized = True
     m_IsDirty = False
     
-    ' Update last update date
-    AppSettings.LastUpdateDate = Now
+    ' Log initialization complete
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo "TransactionRepository.Initialize", _
+            "Repository initialized with " & m_Transactions.Count & " transactions"
+    End If
     
     Exit Sub
     
 ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.SaveChanges", Err.Number, Err.Description
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.Initialize", Err.Number, Err.Description
+    End If
 End Sub
 
-' Clear all transactions
-Public Sub ClearAll()
-    On Error GoTo ErrorHandler
-    
-    If Not m_IsInitialized Then Initialize
-    
-    ' Create a new empty collection
-    Set m_Transactions = New Collection
-    
-    ' Mark as dirty
-    m_IsDirty = True
-    
-    Exit Sub
-    
-ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.ClearAll", Err.Number, Err.Description
+' Public wrapper for initialization
+Public Sub Initialize(Optional ByVal logger As IErrorLogger = Nothing)
+    ITransactionRepository_Initialize logger
 End Sub
 
-' Load transactions from sheet
-Private Sub LoadTransactions()
-    On Error GoTo ErrorHandler
+' Get or create the data sheet
+Private Function GetOrCreateDataSheet() As Worksheet
+    On Error Resume Next
     
-    ' Clear existing collection
-    Set m_Transactions = New Collection
+    Dim ws As Worksheet
     
-    ' Get last row
-    Dim lastRow As Long
-    lastRow = Utilities.GetLastRow(m_DataSheet, 1)
+    ' Try to get existing sheet
+    Set ws = ThisWorkbook.Worksheets(DATA_SHEET_NAME)
     
-    ' If no data, just return
-    If lastRow <= HEADER_ROW Then Exit Sub
-    
-    ' Load each row
-    Dim row As Long
-    Dim trans As Transaction
-    
-    For row = HEADER_ROW + 1 To lastRow
-        ' Create new transaction
-        Set trans = New Transaction
+    ' If sheet doesn't exist, create it
+    If ws Is Nothing Then
+        Set ws = ThisWorkbook.Worksheets.Add
+        ws.Name = DATA_SHEET_NAME
         
-        ' Set ID
-        trans.ID = m_DataSheet.Cells(row, COL_ID).Value
+        ' Hide the sheet (very hidden so it can't be unhidden through the UI)
+        ws.Visible = xlSheetVeryHidden
         
-        ' Initialize from row data
-        trans.InitFromRow _
-            m_DataSheet.Cells(row, COL_DATE).Value, _
-            m_DataSheet.Cells(row, COL_MERCHANT).Value, _
-            m_DataSheet.Cells(row, COL_CATEGORY).Value, _
-            m_DataSheet.Cells(row, COL_AMOUNT).Value, _
-            m_DataSheet.Cells(row, COL_ACCOUNT).Value, _
-            m_DataSheet.Cells(row, COL_OWNER).Value, _
-            m_DataSheet.Cells(row, COL_IS_SHARED).Value, _
-            m_DataSheet.Cells(row, COL_NOTES).Value, _
-            m_DataSheet.Cells(row, COL_SOURCE_FILE).Value
-        
-        ' Add to collection
-        On Error Resume Next
-        m_Transactions.Add trans, trans.ID
-        
-        If Err.Number = 457 Then  ' Already exists - key is duplicated
-            ' Skip this transaction (should not happen)
-            Debug.Print "Duplicate transaction ID found: " & trans.ID
+        If Not m_Logger Is Nothing Then
+            m_Logger.LogInfo "TransactionRepository.GetOrCreateDataSheet", _
+                "Created new data sheet: " & DATA_SHEET_NAME
         End If
-        On Error GoTo ErrorHandler
-    Next row
+    End If
     
-    Exit Sub
+    Set GetOrCreateDataSheet = ws
     
-ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.LoadTransactions", Err.Number, Err.Description
-End Sub
+    On Error GoTo 0
+End Function
 
-' Set up data sheet with headers
-Private Sub SetupDataSheet()
-    On Error GoTo ErrorHandler
+' Get or create the data table
+Private Function GetOrCreateDataTable() As ListObject
+    On Error Resume Next
     
-    ' Set headers
+    Dim tbl As ListObject
+    
+    ' Check if table exists
+    For Each tbl In m_DataSheet.ListObjects
+        If tbl.Name = TABLE_NAME Then
+            Set GetOrCreateDataTable = tbl
+            Exit Function
+        End If
+    Next tbl
+    
+    ' Create table if it doesn't exist
+    ' First set up headers
     m_DataSheet.Cells(HEADER_ROW, COL_ID).Value = "ID"
     m_DataSheet.Cells(HEADER_ROW, COL_DATE).Value = "Date"
     m_DataSheet.Cells(HEADER_ROW, COL_MERCHANT).Value = "Merchant"
@@ -253,162 +167,685 @@ Private Sub SetupDataSheet()
     m_DataSheet.Cells(HEADER_ROW, COL_NOTES).Value = "Notes"
     m_DataSheet.Cells(HEADER_ROW, COL_SOURCE_FILE).Value = "SourceFile"
     
-    ' Format headers
-    With m_DataSheet.Range(m_DataSheet.Cells(HEADER_ROW, 1), m_DataSheet.Cells(HEADER_ROW, COL_SOURCE_FILE))
+    ' Create table with the headers
+    Set tbl = m_DataSheet.ListObjects.Add(xlSrcRange, _
+                                   m_DataSheet.Range(m_DataSheet.Cells(HEADER_ROW, COL_ID), _
+                                                   m_DataSheet.Cells(HEADER_ROW, COL_SOURCE_FILE)), , xlYes)
+    
+    ' Set table name
+    tbl.Name = TABLE_NAME
+    
+    ' Format header row
+    With tbl.HeaderRowRange
         .Font.Bold = True
-        .Interior.Color = AppSettings.ColorPrimary
-        .Font.Color = AppSettings.ColorLightText
+        .Interior.Color = RGB(0, 112, 192)  ' Blue header
+        .Font.Color = RGB(255, 255, 255)    ' White text
     End With
     
-    Exit Sub
+    ' Format data
+    If Not tbl.DataBodyRange Is Nothing Then  ' Only if table has data rows
+        ' Format date column
+        tbl.ListColumns(COL_DATE).DataBodyRange.NumberFormat = "yyyy-mm-dd"
+        
+        ' Format amount column
+        tbl.ListColumns(COL_AMOUNT).DataBodyRange.NumberFormat = "_($* #,##0.00_);_($* (#,##0.00);_($* ""-""??_);_(@_)"
+    End If
     
-ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.SetupDataSheet", Err.Number, Err.Description
-End Sub
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo "TransactionRepository.GetOrCreateDataTable", _
+            "Created new transactions table: " & TABLE_NAME
+    End If
+    
+    Set GetOrCreateDataTable = tbl
+    
+    On Error GoTo 0
+End Function
 
-' Add a collection of transactions and save
-Public Sub AddTransactions(transactions As Collection)
+'=========================================================================
+' Interface Implementation - Get Methods
+'=========================================================================
+
+' Returns all transactions in the repository
+Private Function ITransactionRepository_GetTransactions() As Collection
     On Error GoTo ErrorHandler
     
-    If Not m_IsInitialized Then Initialize
+    ' Ensure repository is initialized
+    If Not m_IsInitialized Then ITransactionRepository_Initialize
     
-    ' Add each transaction
+    ' Create a new collection to return (don't return direct reference to internal collection)
+    Dim result As Collection
+    Set result = New Collection
+    
+    ' Copy all transactions to the new collection
     Dim trans As Transaction
-    
-    For Each trans In transactions
-        AddTransaction trans
+    For Each trans In m_Transactions
+        ' Use the transaction ID as the key for fast lookups
+        On Error Resume Next
+        result.Add trans, trans.ID
+        On Error GoTo ErrorHandler
     Next trans
     
-    ' Save changes
-    SaveChanges
+    ' Return the collection
+    Set ITransactionRepository_GetTransactions = result
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.GetTransactions", Err.Number, Err.Description
+    End If
+    ' Return empty collection on error
+    Set ITransactionRepository_GetTransactions = New Collection
+End Function
+
+' Public wrapper for GetTransactions
+Public Function GetTransactions() As Collection
+    Set GetTransactions = ITransactionRepository_GetTransactions()
+End Function
+
+' Returns transactions within the specified date range
+Private Function ITransactionRepository_GetTransactionsByDateRange(ByVal startDate As Date, ByVal endDate As Date) As Collection
+    On Error GoTo ErrorHandler
+    
+    ' Ensure repository is initialized
+    If Not m_IsInitialized Then ITransactionRepository_Initialize
+    
+    ' Create a new collection for the results
+    Dim result As Collection
+    Set result = New Collection
+    
+    ' Filter transactions by date range
+    Dim trans As Transaction
+    For Each trans In m_Transactions
+        If trans.TransactionDate >= startDate And trans.TransactionDate <= endDate Then
+            result.Add trans
+        End If
+    Next trans
+    
+    ' Return the filtered collection
+    Set ITransactionRepository_GetTransactionsByDateRange = result
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.GetTransactionsByDateRange", Err.Number, Err.Description
+    End If
+    ' Return empty collection on error
+    Set ITransactionRepository_GetTransactionsByDateRange = New Collection
+End Function
+
+' Public wrapper for GetTransactionsByDateRange
+Public Function GetTransactionsByDateRange(ByVal startDate As Date, ByVal endDate As Date) As Collection
+    Set GetTransactionsByDateRange = ITransactionRepository_GetTransactionsByDateRange(startDate, endDate)
+End Function
+
+' Returns transactions with the specified category
+Private Function ITransactionRepository_GetTransactionsByCategory(ByVal category As String) As Collection
+    On Error GoTo ErrorHandler
+    
+    ' Ensure repository is initialized
+    If Not m_IsInitialized Then ITransactionRepository_Initialize
+    
+    ' Create a new collection for the results
+    Dim result As Collection
+    Set result = New Collection
+    
+    ' Filter transactions by category (case-insensitive)
+    Dim trans As Transaction
+    For Each trans In m_Transactions
+        If LCase(trans.Category) = LCase(category) Then
+            result.Add trans
+        End If
+    Next trans
+    
+    ' Return the filtered collection
+    Set ITransactionRepository_GetTransactionsByCategory = result
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.GetTransactionsByCategory", Err.Number, Err.Description
+    End If
+    ' Return empty collection on error
+    Set ITransactionRepository_GetTransactionsByCategory = New Collection
+End Function
+
+' Public wrapper for GetTransactionsByCategory
+Public Function GetTransactionsByCategory(ByVal category As String) As Collection
+    Set GetTransactionsByCategory = ITransactionRepository_GetTransactionsByCategory(category)
+End Function
+
+' Returns transactions with the specified owner
+Private Function ITransactionRepository_GetTransactionsByOwner(ByVal owner As String) As Collection
+    On Error GoTo ErrorHandler
+    
+    ' Ensure repository is initialized
+    If Not m_IsInitialized Then ITransactionRepository_Initialize
+    
+    ' Create a new collection for the results
+    Dim result As Collection
+    Set result = New Collection
+    
+    ' Filter transactions by owner (case-insensitive)
+    Dim trans As Transaction
+    For Each trans In m_Transactions
+        If LCase(trans.Owner) = LCase(owner) Then
+            result.Add trans
+        End If
+    Next trans
+    
+    ' Return the filtered collection
+    Set ITransactionRepository_GetTransactionsByOwner = result
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.GetTransactionsByOwner", Err.Number, Err.Description
+    End If
+    ' Return empty collection on error
+    Set ITransactionRepository_GetTransactionsByOwner = New Collection
+End Function
+
+' Public wrapper for GetTransactionsByOwner
+Public Function GetTransactionsByOwner(ByVal owner As String) As Collection
+    Set GetTransactionsByOwner = ITransactionRepository_GetTransactionsByOwner(owner)
+End Function
+
+' Returns the number of transactions in the repository
+Private Property Get ITransactionRepository_Count() As Long
+    ' Ensure repository is initialized
+    If Not m_IsInitialized Then ITransactionRepository_Initialize
+    
+    ' Return the count
+    ITransactionRepository_Count = m_Transactions.Count
+End Property
+
+' Public wrapper for Count
+Public Property Get Count() As Long
+    Count = ITransactionRepository_Count
+End Property
+
+'=========================================================================
+' Interface Implementation - Add and Remove Methods
+'=========================================================================
+
+' Adds a single transaction to the repository
+Private Function ITransactionRepository_AddTransaction(ByVal transaction As Transaction) As Boolean
+    On Error GoTo ErrorHandler
+    
+    ' Ensure repository is initialized
+    If Not m_IsInitialized Then ITransactionRepository_Initialize
+    
+    ' Check for duplicates and resolve if needed
+    Dim transToAdd As Transaction
+    Set transToAdd = ResolveDuplicate(transaction)
+    
+    ' Generate ID if not set
+    If Len(transToAdd.ID) = 0 Then
+        transToAdd.ID = GenerateUniqueID
+    End If
+    
+    ' Add to collection (remove first if it already exists)
+    On Error Resume Next
+    m_Transactions.Remove transToAdd.ID
+    On Error GoTo ErrorHandler
+    
+    m_Transactions.Add transToAdd, transToAdd.ID
+    
+    ' Mark as dirty (needs saving)
+    m_IsDirty = True
+    
+    ' Publish event to notify that transactions have changed
+    EventManager.PublishEvent EventType.TransactionsChanged
+    
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo "TransactionRepository.AddTransaction", _
+            "Added transaction ID: " & transToAdd.ID
+    End If
+    
+    ITransactionRepository_AddTransaction = True
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.AddTransaction", Err.Number, Err.Description
+    End If
+    ITransactionRepository_AddTransaction = False
+End Function
+
+' Public wrapper for AddTransaction
+Public Function AddTransaction(ByVal transaction As Transaction) As Boolean
+    AddTransaction = ITransactionRepository_AddTransaction(transaction)
+End Function
+
+' Adds multiple transactions to the repository
+Private Function ITransactionRepository_AddTransactions(ByVal transactions As Collection) As Long
+    On Error GoTo ErrorHandler
+    
+    ' Ensure repository is initialized
+    If Not m_IsInitialized Then ITransactionRepository_Initialize
+    
+    Dim addedCount As Long
+    addedCount = 0
+    
+    ' Process each transaction
+    Dim trans As Transaction
+    For Each trans In transactions
+        If ITransactionRepository_AddTransaction(trans) Then
+            addedCount = addedCount + 1
+        End If
+    Next trans
+    
+    ' Publish event to notify that transactions have changed
+    EventManager.PublishEvent EventType.TransactionsChanged
+    
+    ' Return the number of transactions added
+    ITransactionRepository_AddTransactions = addedCount
+    
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo "TransactionRepository.AddTransactions", _
+            "Added " & addedCount & " transactions"
+    End If
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.AddTransactions", Err.Number, Err.Description
+    End If
+    ITransactionRepository_AddTransactions = addedCount
+End Function
+
+' Public wrapper for AddTransactions
+Public Function AddTransactions(ByVal transactions As Collection) As Long
+    AddTransactions = ITransactionRepository_AddTransactions(transactions)
+End Function
+
+' Removes a transaction from the repository by ID
+Private Function ITransactionRepository_RemoveTransaction(ByVal transactionId As String) As Boolean
+    On Error GoTo ErrorHandler
+    
+    ' Ensure repository is initialized
+    If Not m_IsInitialized Then ITransactionRepository_Initialize
+    
+    ' Try to remove the transaction
+    On Error Resume Next
+    m_Transactions.Remove transactionId
+    
+    ' Check if removal was successful
+    If Err.Number = 0 Then
+        m_IsDirty = True
+        ITransactionRepository_RemoveTransaction = True
+        
+        ' Publish event to notify that transactions have changed
+        EventManager.PublishEvent EventType.TransactionsChanged
+        
+        If Not m_Logger Is Nothing Then
+            m_Logger.LogInfo "TransactionRepository.RemoveTransaction", _
+                "Removed transaction ID: " & transactionId
+        End If
+    Else
+        ITransactionRepository_RemoveTransaction = False
+        
+        If Not m_Logger Is Nothing Then
+            m_Logger.LogWarning "TransactionRepository.RemoveTransaction", _
+                "Transaction not found for removal, ID: " & transactionId
+        End If
+    End If
+    
+    On Error GoTo ErrorHandler
+    
+    Exit Function
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.RemoveTransaction", Err.Number, Err.Description
+    End If
+    ITransactionRepository_RemoveTransaction = False
+End Function
+
+' Public wrapper for RemoveTransaction
+Public Function RemoveTransaction(ByVal transactionId As String) As Boolean
+    RemoveTransaction = ITransactionRepository_RemoveTransaction(transactionId)
+End Function
+
+' Clears all transactions from the repository
+Private Sub ITransactionRepository_ClearAll()
+    On Error GoTo ErrorHandler
+    
+    ' Ensure repository is initialized
+    If Not m_IsInitialized Then ITransactionRepository_Initialize
+    
+    ' Create a new empty collection
+    Set m_Transactions = New Collection
+    
+    ' Mark as dirty
+    m_IsDirty = True
+    
+    ' Publish event to notify that transactions have changed
+    EventManager.PublishEvent EventType.TransactionsChanged
+    
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo "TransactionRepository.ClearAll", "Cleared all transactions"
+    End If
     
     Exit Sub
     
 ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.AddTransactions", Err.Number, Err.Description
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.ClearAll", Err.Number, Err.Description
+    End If
 End Sub
 
-' Check for duplicate transactions and return the newer one
-Public Function ResolveDuplicate(newTrans As Transaction) As Transaction
+' Public wrapper for ClearAll
+Public Sub ClearAll()
+    ITransactionRepository_ClearAll
+End Sub
+
+'=========================================================================
+' Interface Implementation - Save Changes
+'=========================================================================
+
+' Saves all changes to the underlying storage (Excel Table)
+Private Function ITransactionRepository_SaveChanges() As Boolean
     On Error GoTo ErrorHandler
     
-    If Not m_IsInitialized Then Initialize
+    ' Ensure repository is initialized
+    If Not m_IsInitialized Then ITransactionRepository_Initialize
     
-    Dim existingTrans As Transaction
-    Dim dateStr As String
-    Dim key As String
+    ' If no changes to save, return success
+    If Not m_IsDirty Then
+        ITransactionRepository_SaveChanges = True
+        Exit Function
+    End If
+    
+    ' Log the start of save operation
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo "TransactionRepository.SaveChanges", _
+            "Saving " & m_Transactions.Count & " transactions to table"
+    End If
+    
+    ' Performance optimization for Excel
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
+    
+    ' Clear existing data (except header)
+    If m_DataTable.ListRows.Count > 0 Then
+        m_DataTable.DataBodyRange.Delete
+    End If
+    
+    ' Check if there are transactions to save
+    Dim transCount As Long
+    transCount = m_Transactions.Count
+    
+    If transCount > 0 Then
+        ' Prepare data array for bulk insertion
+        Dim dataArray() As Variant
+        ReDim dataArray(1 To transCount, 1 To 10)
+        
+        ' Fill array with transaction data
+        Dim i As Long
+        Dim trans As Transaction
+        i = 1
+        
+        For Each trans In m_Transactions
+            dataArray(i, COL_ID) = trans.ID
+            dataArray(i, COL_DATE) = trans.TransactionDate
+            dataArray(i, COL_MERCHANT) = trans.Merchant
+            dataArray(i, COL_CATEGORY) = trans.Category
+            dataArray(i, COL_AMOUNT) = trans.Amount
+            dataArray(i, COL_ACCOUNT) = trans.Account
+            dataArray(i, COL_OWNER) = trans.Owner
+            dataArray(i, COL_IS_SHARED) = trans.IsShared
+            dataArray(i, COL_NOTES) = trans.Notes
+            dataArray(i, COL_SOURCE_FILE) = trans.SourceFile
+            
+            i = i + 1
+        Next trans
+        
+        ' Add all rows to the table in one operation for better performance
+        ' First add the rows
+        For i = 1 To transCount
+            m_DataTable.ListRows.Add
+        Next i
+        
+        ' Then set the values all at once (if table has data body range)
+        If Not m_DataTable.DataBodyRange Is Nothing Then
+            m_DataTable.DataBodyRange.Value = dataArray
+            
+            ' Format date column
+            m_DataTable.ListColumns(COL_DATE).DataBodyRange.NumberFormat = "yyyy-mm-dd"
+            
+            ' Format amount column
+            m_DataTable.ListColumns(COL_AMOUNT).DataBodyRange.NumberFormat = "_($* #,##0.00_);_($* (#,##0.00);_($* ""-""??_);_(@_)"
+        End If
+    End If
+    
+    ' Mark as clean (all changes saved)
+    m_IsDirty = False
+    
+    ' Publish event to notify that transactions have been saved
+    EventManager.PublishEvent EventType.TransactionsChanged
+    
+    ' Restore Excel settings
+    Application.EnableEvents = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+    
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo "TransactionRepository.SaveChanges", "Save operation completed successfully"
+    End If
+    
+    ITransactionRepository_SaveChanges = True
+    
+    Exit Function
+    
+ErrorHandler:
+    ' Restore Excel settings even on error
+    Application.EnableEvents = True
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+    
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.SaveChanges", Err.Number, Err.Description
+    End If
+    ITransactionRepository_SaveChanges = False
+End Function
+
+' Public wrapper for SaveChanges
+Public Function SaveChanges() As Boolean
+    SaveChanges = ITransactionRepository_SaveChanges()
+End Function
+
+'=========================================================================
+' Helper Methods
+'=========================================================================
+
+' Loads transactions from the Excel Table into memory
+Private Sub LoadTransactionsFromTable()
+    On Error GoTo ErrorHandler
+    
+    ' Start with a new collection
+    Set m_Transactions = New Collection
+    
+    ' If table has no data, exit
+    If m_DataTable.ListRows.Count = 0 Then
+        If Not m_Logger Is Nothing Then
+            m_Logger.LogInfo "TransactionRepository.LoadTransactionsFromTable", _
+                "No transactions found in table"
+        End If
+        Exit Sub
+    End If
+    
+    ' Get all data at once for better performance
+    Dim dataRange As Range
+    Set dataRange = m_DataTable.DataBodyRange
+    
+    Dim dataArray As Variant
+    dataArray = dataRange.Value
+    
+    ' Process data array
+    Dim i As Long
+    Dim rowCount As Long
+    
+    ' Use total rows from the array dimension
+    rowCount = UBound(dataArray, 1)
+    
+    For i = 1 To rowCount
+        ' Create and initialize new transaction
+        Dim trans As New Transaction
+        
+        ' Set transaction ID
+        trans.ID = CStr(dataArray(i, COL_ID))
+        
+        ' Initialize transaction from the data
+        trans.TransactionDate = dataArray(i, COL_DATE)
+        trans.Merchant = CStr(dataArray(i, COL_MERCHANT))
+        trans.Category = CStr(dataArray(i, COL_CATEGORY))
+        trans.Amount = CDbl(dataArray(i, COL_AMOUNT))
+        trans.Account = CStr(dataArray(i, COL_ACCOUNT))
+        trans.Owner = CStr(dataArray(i, COL_OWNER))
+        trans.IsShared = CBool(dataArray(i, COL_IS_SHARED))
+        trans.Notes = CStr(dataArray(i, COL_NOTES))
+        trans.SourceFile = CStr(dataArray(i, COL_SOURCE_FILE))
+        
+        ' Add to collection with ID as key for fast lookups
+        On Error Resume Next
+        m_Transactions.Add trans, trans.ID
+        
+        If Err.Number = 457 Then  ' Collection key already exists
+            If Not m_Logger Is Nothing Then
+                m_Logger.LogWarning "TransactionRepository.LoadTransactionsFromTable", _
+                    "Duplicate transaction ID found: " & trans.ID
+            End If
+        End If
+        On Error GoTo ErrorHandler
+    Next i
+    
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo "TransactionRepository.LoadTransactionsFromTable", _
+            "Loaded " & m_Transactions.Count & " transactions from table"
+    End If
+    
+    Exit Sub
+    
+ErrorHandler:
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.LoadTransactionsFromTable", Err.Number, Err.Description
+    End If
+End Sub
+
+' Generates a unique ID for a transaction
+Private Function GenerateUniqueID() As String
+    ' Create a GUID-like ID with timestamp to ensure uniqueness
+    Dim timeStamp As String
+    timeStamp = Format(Now, "yyyymmddhhnnss")
+    
+    Dim randomPart As String
+    randomPart = Format(Rnd(), "0000000000")
+    
+    GenerateUniqueID = "TX-" & timeStamp & "-" & randomPart
+End Function
+
+' Checks for duplicate transactions and resolves conflicts
+Private Function ResolveDuplicate(ByVal newTrans As Transaction) As Transaction
+    On Error GoTo ErrorHandler
+    
+    ' If transaction has an ID, check if it already exists
+    If Len(newTrans.ID) > 0 Then
+        On Error Resume Next
+        Dim existingTrans As Transaction
+        Set existingTrans = m_Transactions(newTrans.ID)
+        On Error GoTo ErrorHandler
+        
+        ' If found, this is an update to an existing transaction
+        If Not existingTrans Is Nothing Then
+            ' For now, just use the new transaction
+            Set ResolveDuplicate = newTrans
+            Exit Function
+        End If
+    End If
+    
+    ' Check for potential duplicates based on date, merchant, and amount
+    Dim potentialDuplicate As Boolean
+    potentialDuplicate = False
     
     ' Create a key to detect potential duplicates
+    Dim dateStr As String
     dateStr = Format(newTrans.TransactionDate, "yyyy-mm-dd")
-    key = dateStr & "|" & newTrans.Merchant & "|" & newTrans.Amount
+    
+    Dim dupeKey As String
+    dupeKey = dateStr & "|" & newTrans.Merchant & "|" & newTrans.Amount
     
     ' Look for matching transactions
-    For Each existingTrans In m_Transactions
-        Dim existingDateStr As String
-        Dim existingKey As String
+    Dim trans As Transaction
+    For Each trans In m_Transactions
+        Dim transDateStr As String
+        transDateStr = Format(trans.TransactionDate, "yyyy-mm-dd")
         
-        existingDateStr = Format(existingTrans.TransactionDate, "yyyy-mm-dd")
-        existingKey = existingDateStr & "|" & existingTrans.Merchant & "|" & existingTrans.Amount
+        Dim transKey As String
+        transKey = transDateStr & "|" & trans.Merchant & "|" & trans.Amount
         
-        If existingKey = key Then
-            ' Found a duplicate - need to decide which to keep
+        If transKey = dupeKey Then
+            ' Found a potential duplicate
+            potentialDuplicate = True
             
-            ' Compare source files for dates
-            Dim existingFileDate As String
-            Dim newFileDate As String
+            ' Log the potential duplicate
+            If Not m_Logger Is Nothing Then
+                m_Logger.LogWarning "TransactionRepository.ResolveDuplicate", _
+                    "Potential duplicate found for transaction on " & dateStr & _
+                    " at " & newTrans.Merchant & " for " & Format(newTrans.Amount, "$#,##0.00")
+            End If
             
-            existingFileDate = Utilities.ExtractDateFromFilename(existingTrans.SourceFile)
-            newFileDate = Utilities.ExtractDateFromFilename(newTrans.SourceFile)
-            
-            ' If we can compare dates, return the newer one
-            If Len(existingFileDate) > 0 And Len(newFileDate) > 0 Then
-                If newFileDate > existingFileDate Then
+            ' Simple resolution strategy - use the newest file as source of truth
+            ' This could be enhanced with more sophisticated rules
+            If Len(trans.SourceFile) > 0 And Len(newTrans.SourceFile) > 0 Then
+                ' If new transaction has a more recent file date, use it
+                If newTrans.SourceFile > trans.SourceFile Then
                     Set ResolveDuplicate = newTrans
                 Else
-                    Set ResolveDuplicate = existingTrans
+                    Set ResolveDuplicate = trans
                 End If
+                
                 Exit Function
             End If
         End If
-    Next existingTrans
+    Next trans
     
-    ' No duplicate found, return the new transaction
+    ' If no duplicate found, use the new transaction
     Set ResolveDuplicate = newTrans
     
     Exit Function
     
 ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.ResolveDuplicate", Err.Number, Err.Description
-    Set ResolveDuplicate = newTrans ' Default to new transaction in case of error
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogError "TransactionRepository.ResolveDuplicate", Err.Number, Err.Description
+    End If
+    
+    ' On error, default to using the new transaction
+    Set ResolveDuplicate = newTrans
 End Function
 
-' Check for duplicates by date range
-Public Function GetDuplicatesInDateRange(startDate As Date, endDate As Date) As Collection
-    On Error GoTo ErrorHandler
-    
-    If Not m_IsInitialized Then Initialize
-    
-    Dim result As New Collection
-    Dim transDict As Object
-    Set transDict = CreateObject("Scripting.Dictionary")
-    
-    ' Get transactions in date range
-    Dim trans As Transaction
-    Dim transactionList As Collection
-    Set transactionList = GetTransactionsByDateRange(startDate, endDate)
-    
-    ' Group by transaction signature
-    For Each trans In transactionList
-        Dim key As String
-        key = Format(trans.TransactionDate, "yyyy-mm-dd") & "|" & trans.Merchant & "|" & trans.Amount
-        
-        If transDict.Exists(key) Then
-            ' Found a duplicate
-            If Not ExistsInCollection(result, key) Then
-                result.Add key
-            End If
-        Else
-            transDict.Add key, trans
-        End If
-    Next trans
-    
-    Set GetDuplicatesInDateRange = result
-    
-    Exit Function
-    
-ErrorHandler:
-    ErrorLogger.LogError "TransactionRepository.GetDuplicatesInDateRange", Err.Number, Err.Description
-    Set GetDuplicatesInDateRange = New Collection
-End Function
+'=========================================================================
+' Cleanup
+'=========================================================================
 
-' Helper function to check if a value exists in a collection
-Private Function ExistsInCollection(col As Collection, value As Variant) As Boolean
-    On Error Resume Next
-    
-    Dim item As Variant
-    For Each item In col
-        If item = value Then
-            ExistsInCollection = True
-            Exit Function
-        End If
-    Next item
-    
-    ExistsInCollection = False
-    
-    On Error GoTo 0
-End Function
-
-' Class initialize
-Private Sub Class_Initialize()
-    ' Nothing needed here as we're using PredeclaredId = True
-    ' and explicit initialization via Initialize method
-    m_IsInitialized = False
-    m_IsDirty = False
-End Sub
-
-' Class terminate
 Private Sub Class_Terminate()
-    ' Clean up to prevent memory leaks
+    ' Save any pending changes
+    If m_IsDirty Then
+        On Error Resume Next
+        ITransactionRepository_SaveChanges
+        On Error GoTo 0
+    End If
+    
+    ' Clean up object references to prevent memory leaks
     Set m_Transactions = Nothing
     Set m_DataSheet = Nothing
+    Set m_DataTable = Nothing
+    Set m_Logger = Nothing
 End Sub
