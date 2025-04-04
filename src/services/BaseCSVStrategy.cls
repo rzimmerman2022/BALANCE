@@ -1,54 +1,60 @@
-' File: src/services/BankCSVStrategy.cls
-'---------------------------------------
+' File: src/services/BaseCSVStrategy.cls
+'----------------------------------------
 VERSION 1.0 CLASS
 BEGIN
   MultiUse = -1  'True
 END
-Attribute VB_Name = "BankCSVStrategy"
+Attribute VB_Name = "BaseCSVStrategy"
 Attribute VB_GlobalNameSpace = False
-Attribute VB_Creatable = True ' Changed to True
+Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
-
 Option Explicit
 
 ' BALANCE - Bilateral Accounting Ledger for Analyzing Networked Couple Expenses
-' BankCSVStrategy Class - Implements ICSVImportStrategy
+' BaseCSVStrategy Class - Abstract base class for CSV import strategies
 '
-' Purpose: Strategy for importing CSV files from a typical bank account.
-' This strategy handles CSV files with a specific format used by many banks,
-' including date, description, amount, and other typical banking fields.
+' Purpose: Provides common functionality for all CSV import strategies.
+' This class extracts shared code from the various CSV strategy implementations,
+' promoting code reuse and consistency across strategies.
 
 ' Interface implementation
 Implements ICSVImportStrategy
 
-' CSV format details
-Private m_ExpectedHeaders As Variant
-Private m_ColumnMapping As Object ' Dictionary
-Private m_Logger As IErrorLogger
-
-' Bank-specific parsing rules
-Private Const DATE_FORMAT As String = "mm/dd/yyyy"
-Private Const DEBIT_INDICATOR As String = "-"
-Private Const FILE_SIGNATURE As String = "Bank Account Transactions"
+' Member variables (to be used by subclasses)
+Public m_ExpectedHeaders As Variant
+Public m_ColumnMapping As Object ' Dictionary
+Public m_Logger As IErrorLogger
+Public m_StrategyName As String
+Public m_StrategyDescription As String
 
 '=========================================================================
 ' Initialization
 '=========================================================================
 
 Private Sub Class_Initialize()
-    ' Set up expected headers for this format
-    m_ExpectedHeaders = Array("Date", "Description", "Amount", "Running Bal")
-    
-    ' Set up column mapping (CSV column -> Transaction property)
+    ' Create column mapping dictionary
     Set m_ColumnMapping = CreateObject("Scripting.Dictionary")
-    m_ColumnMapping.Add "Date", "TransactionDate"
-    m_ColumnMapping.Add "Description", "Merchant"
-    m_ColumnMapping.Add "Amount", "Amount"
     
-    ' Additional mapping information for special handling
-    m_ColumnMapping.Add "DateFormat", DATE_FORMAT
-    m_ColumnMapping.Add "DebitIndicator", DEBIT_INDICATOR
+    ' Set default values
+    m_StrategyName = "BaseStrategy"
+    m_StrategyDescription = "Base CSV import strategy"
+    
+    ' Call the abstract initialization method
+    InitializeStrategy
+End Sub
+
+' Abstract method to be overridden by subclasses
+Public Sub InitializeStrategy()
+    ' To be implemented by subclasses
+    ' This method should set m_ExpectedHeaders, m_ColumnMapping, etc.
+End Sub
+
+' Initialize with logger
+Public Sub Initialize(Optional ByVal logger As IErrorLogger = Nothing)
+    If Not logger Is Nothing Then
+        Set m_Logger = logger
+    End If
 End Sub
 
 '=========================================================================
@@ -57,73 +63,29 @@ End Sub
 
 ' Check if this strategy can process the given file
 Private Function ICSVImportStrategy_CanProcessFile(ByVal filePath As String) As Boolean
-    On Error GoTo ErrorHandler
-    
-    ' Read the first few lines of the file
-    Dim fileNum As Integer
-    Dim headerLine As String, firstDataLine As String
-    Dim firstFewLines As String
-    Dim lineCount As Integer
-    
-    fileNum = FreeFile
-    Open filePath For Input As #fileNum
-    
-    ' Read up to 10 lines
-    lineCount = 0
-    firstFewLines = ""
-    
-    Do Until EOF(fileNum) Or lineCount >= 10
-        Line Input #fileNum, headerLine
-        firstFewLines = firstFewLines & headerLine & vbCrLf
-        lineCount = lineCount + 1
-    Loop
-    
-    Close #fileNum
-    
-    ' Check for bank signature or known headers
-    If InStr(1, firstFewLines, FILE_SIGNATURE, vbTextCompare) > 0 Then
-        ICSVImportStrategy_CanProcessFile = True
-        Exit Function
-    End If
-    
-    ' Check for expected headers
-    Dim header As Variant
-    Dim headerCount As Integer
-    
-    headerCount = 0
-    For Each header In m_ExpectedHeaders
-        If InStr(1, firstFewLines, header, vbTextCompare) > 0 Then
-            headerCount = headerCount + 1
-        End If
-    Next header
-    
-    ' If most expected headers are found, assume this format
-    ICSVImportStrategy_CanProcessFile = (headerCount >= UBound(m_ExpectedHeaders) * 0.75)
-    
-    Exit Function
-    
-ErrorHandler:
-    If Not m_Logger Is Nothing Then
-        m_Logger.LogError "BankCSVStrategy.CanProcessFile", Err.Number, Err.Description
-    End If
-    ICSVImportStrategy_CanProcessFile = False
+    ' Call the abstract method that subclasses must implement
+    ICSVImportStrategy_CanProcessFile = CanProcessFileImpl(filePath)
+End Function
+
+' Abstract method to be implemented by subclasses
+Public Function CanProcessFileImpl(ByVal filePath As String) As Boolean
+    ' To be implemented by subclasses
+    Err.Raise 5, "BaseCSVStrategy", "Abstract method must be overridden"
 End Function
 
 ' Get the name of this strategy
 Private Property Get ICSVImportStrategy_StrategyName() As String
-    ICSVImportStrategy_StrategyName = "StandardBankFormat"
+    ICSVImportStrategy_StrategyName = m_StrategyName
 End Property
 
 ' Get the description of this strategy
 Private Property Get ICSVImportStrategy_StrategyDescription() As String
-    ICSVImportStrategy_StrategyDescription = "Standard bank account CSV format with date, description, and amount columns"
+    ICSVImportStrategy_StrategyDescription = m_StrategyDescription
 End Property
 
 ' Import transactions from the CSV file
 Private Function ICSVImportStrategy_ImportTransactions(ByVal filePath As String, ByVal owner As String, _
                                                     Optional ByVal logger As IErrorLogger = Nothing) As Collection
-    On Error GoTo ErrorHandler
-    
     ' Set logger if provided
     If Not logger Is Nothing Then
         Set m_Logger = logger
@@ -133,10 +95,7 @@ Private Function ICSVImportStrategy_ImportTransactions(ByVal filePath As String,
     Dim transactions As New Collection
     
     ' Log start of import
-    If Not m_Logger Is Nothing Then
-        m_Logger.LogInfo "BankCSVStrategy.ImportTransactions", _
-            "Starting import from " & filePath
-    End If
+    LogInfo "Starting import from " & filePath
     
     ' Read the CSV file
     Dim fileContent As String
@@ -148,10 +107,7 @@ Private Function ICSVImportStrategy_ImportTransactions(ByVal filePath As String,
     
     ' Check if parsing succeeded
     If Not IsArray(csvData) Then
-        If Not m_Logger Is Nothing Then
-            m_Logger.LogError "BankCSVStrategy.ImportTransactions", 0, _
-                "Failed to parse CSV file: " & filePath
-        End If
+        LogError 0, "Failed to parse CSV file: " & filePath
         Set ICSVImportStrategy_ImportTransactions = transactions
         Exit Function
     End If
@@ -164,10 +120,7 @@ Private Function ICSVImportStrategy_ImportTransactions(ByVal filePath As String,
     headerRowIndex = FindHeaderRow(csvData, columnIndices)
     
     If headerRowIndex < 0 Then
-        If Not m_Logger Is Nothing Then
-            m_Logger.LogError "BankCSVStrategy.ImportTransactions", 0, _
-                "Could not find header row in CSV file: " & filePath
-        End If
+        LogError 0, "Could not find header row in CSV file: " & filePath
         Set ICSVImportStrategy_ImportTransactions = transactions
         Exit Function
     End If
@@ -180,7 +133,7 @@ Private Function ICSVImportStrategy_ImportTransactions(ByVal filePath As String,
     ' Process each row after the header
     For i = headerRowIndex + 1 To rowCount
         ' Create a transaction from the row
-        Dim trans As Transaction
+        Dim trans As ITransaction
         Set trans = CreateTransactionFromRow(csvData, i, columnIndices, owner, filePath)
         
         ' Add to collection if valid
@@ -190,20 +143,9 @@ Private Function ICSVImportStrategy_ImportTransactions(ByVal filePath As String,
     Next i
     
     ' Log completion
-    If Not m_Logger Is Nothing Then
-        m_Logger.LogInfo "BankCSVStrategy.ImportTransactions", _
-            "Imported " & transactions.Count & " transactions from " & filePath
-    End If
+    LogInfo "Imported " & transactions.Count & " transactions from " & filePath
     
     Set ICSVImportStrategy_ImportTransactions = transactions
-    
-    Exit Function
-    
-ErrorHandler:
-    If Not m_Logger Is Nothing Then
-        m_Logger.LogError "BankCSVStrategy.ImportTransactions", Err.Number, Err.Description
-    End If
-    Set ICSVImportStrategy_ImportTransactions = New Collection
 End Function
 
 ' Get the column mapping for this strategy
@@ -217,11 +159,11 @@ Private Function ICSVImportStrategy_GetExpectedHeaders() As Variant
 End Function
 
 '=========================================================================
-' Helper Methods
+' Common Helper Methods
 '=========================================================================
 
 ' Read the entire file content
-Private Function ReadEntireFile(ByVal filePath As String) As String
+Public Function ReadEntireFile(ByVal filePath As String) As String ' Changed Protected to Public
     On Error GoTo ErrorHandler
     
     Dim fileNum As Integer
@@ -238,14 +180,12 @@ Private Function ReadEntireFile(ByVal filePath As String) As String
     Exit Function
     
 ErrorHandler:
-    If Not m_Logger Is Nothing Then
-        m_Logger.LogError "BankCSVStrategy.ReadEntireFile", Err.Number, Err.Description
-    End If
+    LogError Err.Number, "Error reading file: " & Err.Description
     ReadEntireFile = ""
 End Function
 
 ' Parse CSV content into a 2D array
-Private Function ParseCSV(ByVal csvContent As String) As Variant
+Public Function ParseCSV(ByVal csvContent As String) As Variant ' Changed Protected to Public
     On Error GoTo ErrorHandler
     
     ' Standardize line endings
@@ -317,14 +257,12 @@ Private Function ParseCSV(ByVal csvContent As String) As Variant
     Exit Function
     
 ErrorHandler:
-    If Not m_Logger Is Nothing Then
-        m_Logger.LogError "BankCSVStrategy.ParseCSV", Err.Number, Err.Description
-    End If
+    LogError Err.Number, "Error parsing CSV: " & Err.Description
     ParseCSV = Array()
 End Function
 
 ' Count the number of columns in a CSV line
-Private Function CountCSVColumns(ByVal line As String) As Long
+Public Function CountCSVColumns(ByVal line As String) As Long ' Changed Protected to Public
     On Error GoTo ErrorHandler
     
     ' Handle quoted fields correctly
@@ -340,7 +278,7 @@ ErrorHandler:
 End Function
 
 ' Parse a CSV line into an array of fields
-Private Function ParseCSVLine(ByVal line As String) As Variant
+Public Function ParseCSVLine(ByVal line As String) As Variant ' Changed Protected to Public
     On Error GoTo ErrorHandler
     
     Dim result As Variant
@@ -358,7 +296,7 @@ Private Function ParseCSVLine(ByVal line As String) As Variant
         Select Case currentChar
             Case """"
                 ' Handle quotes (double quote is an escaped quote in CSV)
-                If i < Len(line) And Mid$(line, i + 1, 1) = """" Then ' Changed AndAlso to And
+                If i < Len(line) And Mid$(line, i + 1, 1) = """" Then
                     fieldValue = fieldValue & """"
                     i = i + 1 ' Skip the next quote
                 Else
@@ -395,16 +333,14 @@ Private Function ParseCSVLine(ByVal line As String) As Variant
     Exit Function
     
 ErrorHandler:
-    If Not m_Logger Is Nothing Then
-        m_Logger.LogError "BankCSVStrategy.ParseCSVLine", Err.Number, Err.Description
-    End If
+    LogError Err.Number, "Error parsing CSV line: " & Err.Description
     
     ' Return a single-element array with the original line on error
     ParseCSVLine = Array(line)
 End Function
 
 ' Find the header row and map column indices
-Private Function FindHeaderRow(ByVal csvData As Variant, ByRef columnIndices As Object) As Long
+Public Function FindHeaderRow(ByVal csvData As Variant, ByRef columnIndices As Object) As Long ' Changed Protected to Public
     On Error GoTo ErrorHandler
     
     Dim rowCount As Long, colCount As Long
@@ -463,154 +399,42 @@ Private Function FindHeaderRow(ByVal csvData As Variant, ByRef columnIndices As 
     Exit Function
     
 ErrorHandler:
-    If Not m_Logger Is Nothing Then
-        m_Logger.LogError "BankCSVStrategy.FindHeaderRow", Err.Number, Err.Description
-    End If
+    LogError Err.Number, "Error finding header row: " & Err.Description
     FindHeaderRow = -1
 End Function
 
-' Create a Transaction object from a CSV row
-Private Function CreateTransactionFromRow(ByVal csvData As Variant, ByVal rowIndex As Long, _
-                                         ByVal columnIndices As Object, _
-                                         ByVal owner As String, ByVal filePath As String) As Transaction
-    On Error GoTo ErrorHandler
-    
-    ' Create a new transaction
-    Dim trans As New Transaction
-    
-    ' Set transaction properties from CSV data
-    
-    ' Date
-    If columnIndices.Exists("Date") Then
-        Dim dateStr As String
-        dateStr = csvData(rowIndex, columnIndices("Date"))
-        
-        ' Parse date according to expected format
-        trans.TransactionDate = ParseDate(dateStr, m_ColumnMapping("DateFormat"))
-    End If
-    
-    ' Description/Merchant
-    If columnIndices.Exists("Description") Then
-        trans.Merchant = csvData(rowIndex, columnIndices("Description"))
-    End If
-    
-    ' Amount
-    If columnIndices.Exists("Amount") Then
-        Dim amountStr As String
-        amountStr = csvData(rowIndex, columnIndices("Amount"))
-        
-        ' Parse amount, handling debits correctly
-        trans.Amount = ParseAmount(amountStr, m_ColumnMapping("DebitIndicator"))
-    End If
-    
-    ' Set the owner
-    trans.Owner = owner
-    
-    ' Set default category - to be refined later
-    trans.Category = "Uncategorized"
-    
-    ' Set source file
-    trans.SourceFile = filePath
-    
-    ' Assume not shared by default
-    trans.IsShared = False
-    
-    ' Return the transaction
-    Set CreateTransactionFromRow = trans
-    
-    Exit Function
-    
-ErrorHandler:
-    If Not m_Logger Is Nothing Then
-        m_Logger.LogError "BankCSVStrategy.CreateTransactionFromRow", Err.Number, Err.Description
-    End If
-    Set CreateTransactionFromRow = Nothing
+' Abstract method to create a Transaction object from a CSV row
+Public Function CreateTransactionFromRow(ByVal csvData As Variant, ByVal rowIndex As Long, _
+                                       ByVal columnIndices As Object, _
+                                       ByVal owner As String, ByVal filePath As String) As ITransaction
+    ' To be implemented by subclasses
+    Err.Raise 5, "BaseCSVStrategy", "Abstract method must be overridden"
 End Function
 
-' Parse a date string according to the specified format
-Private Function ParseDate(ByVal dateStr As String, ByVal dateFormat As String) As Date
-    On Error GoTo ErrorHandler
-    
-    ' Handle different date formats
-    Select Case dateFormat
-        Case "mm/dd/yyyy"
-            ' US format: MM/DD/YYYY
-            Dim parts As Variant
-            parts = Split(dateStr, "/")
-            
-            If UBound(parts) = 2 Then
-                ParseDate = DateSerial(CInt(parts(2)), CInt(parts(0)), CInt(parts(1)))
-            Else
-                ParseDate = CDate(dateStr) ' Try default conversion
-            End If
-            
-        Case "dd/mm/yyyy"
-            ' European format: DD/MM/YYYY
-            parts = Split(dateStr, "/")
-            
-            If UBound(parts) = 2 Then
-                ParseDate = DateSerial(CInt(parts(2)), CInt(parts(1)), CInt(parts(0)))
-            Else
-                ParseDate = CDate(dateStr) ' Try default conversion
-            End If
-            
-        Case Else
-            ' Try default conversion
-            ParseDate = CDate(dateStr)
-    End Select
-    
-    Exit Function
-    
-ErrorHandler:
-    If Not m_Logger Is Nothing Then
-        m_Logger.LogError "BankCSVStrategy.ParseDate", Err.Number, _
-            "Could not parse date: " & dateStr
-    End If
-    
-    ' Return current date on error
-    ParseDate = Date
-End Function
+'=========================================================================
+' Logging Helper Methods
+'=========================================================================
 
-' Parse an amount string, handling different formats
-Private Function ParseAmount(ByVal amountStr As String, ByVal debitIndicator As String) As Double
-    On Error GoTo ErrorHandler
-    
-    ' Remove currency symbols, commas, etc.
-    amountStr = Replace(amountStr, "$", "")
-    amountStr = Replace(amountStr, ",", "")
-    amountStr = Replace(amountStr, " ", "")
-    
-    ' Check if this is a debit (expense)
-    Dim isDebit As Boolean
-    isDebit = (InStr(1, amountStr, debitIndicator) > 0)
-    
-    ' Remove any parentheses or negative signs
-    amountStr = Replace(amountStr, "(", "")
-    amountStr = Replace(amountStr, ")", "")
-    amountStr = Replace(amountStr, "-", "")
-    
-    ' Convert to number
-    Dim amount As Double
-    amount = CDbl(amountStr)
-    
-    ' Apply sign based on debit/credit
-    If isDebit Then
-        amount = -amount
-    End If
-    
-    ParseAmount = amount
-    
-    Exit Function
-    
-ErrorHandler:
+' Log an error message
+Public Sub LogError(ByVal errorNumber As Long, ByVal errorMessage As String) ' Changed Protected to Public
     If Not m_Logger Is Nothing Then
-        m_Logger.LogError "BankCSVStrategy.ParseAmount", Err.Number, _
-            "Could not parse amount: " & amountStr
+        m_Logger.LogError m_StrategyName, errorNumber, errorMessage
     End If
-    
-    ' Return 0 on error
-    ParseAmount = 0
-End Function
+End Sub
+
+' Log an informational message
+Public Sub LogInfo(ByVal message As String) ' Changed Protected to Public
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogInfo m_StrategyName, message
+    End If
+End Sub
+
+' Log a warning message
+Public Sub LogWarning(ByVal message As String) ' Changed Protected to Public
+    If Not m_Logger Is Nothing Then
+        m_Logger.LogWarning m_StrategyName, message
+    End If
+End Sub
 
 '=========================================================================
 ' Public Methods
@@ -623,16 +447,26 @@ End Function
 
 ' Public getter for strategy name
 Public Property Get StrategyName() As String
-    StrategyName = ICSVImportStrategy_StrategyName
+    StrategyName = m_StrategyName
 End Property
 
 ' Public getter for strategy description
 Public Property Get StrategyDescription() As String
-    StrategyDescription = ICSVImportStrategy_StrategyDescription
+    StrategyDescription = m_StrategyDescription
 End Property
 
 ' Public method to import transactions
 Public Function ImportTransactions(ByVal filePath As String, ByVal owner As String, _
                                  Optional ByVal logger As IErrorLogger = Nothing) As Collection
     Set ImportTransactions = ICSVImportStrategy_ImportTransactions(filePath, owner, logger)
+End Function
+
+' Public getter for column mapping
+Public Function GetColumnMapping() As Object
+    Set GetColumnMapping = m_ColumnMapping
+End Function
+
+' Public getter for expected headers
+Public Function GetExpectedHeaders() As Variant
+    GetExpectedHeaders = m_ExpectedHeaders
 End Function

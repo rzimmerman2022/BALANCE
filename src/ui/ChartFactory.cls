@@ -149,10 +149,11 @@ Public Function CreateMonthlyColumnChart(ws As Worksheet, left As Double, top As
     
     ' Write data to the charts sheet
     m_ChartsSheet.Cells(nextRow, 1).Value = "Month"
-    m_ChartsSheet.Cells(nextRow, 2).Value = "Amount"
-    m_ChartsSheet.Cells(nextRow, 3).Value = "Transactions"
-    
-    m_ChartsSheet.Range(m_ChartsSheet.Cells(nextRow, 1), m_ChartsSheet.Cells(nextRow, 3)).Font.Bold = True
+    m_ChartsSheet.Cells(nextRow, 2).Value = "Net Amount" ' Changed Header
+    m_ChartsSheet.Cells(nextRow, 3).Value = "Expenses"   ' Changed Header
+    m_ChartsSheet.Cells(nextRow, 4).Value = "Income"     ' Added Header
+
+    m_ChartsSheet.Range(m_ChartsSheet.Cells(nextRow, 1), m_ChartsSheet.Cells(nextRow, 4)).Font.Bold = True ' Adjusted range
     
     Dim i As Long
     Dim month As MonthSummary
@@ -168,11 +169,13 @@ Public Function CreateMonthlyColumnChart(ws As Worksheet, left As Double, top As
     ' Reverse the array
     For i = 1 To monthlySummary.Count
         Set month = monthItems(monthlySummary.Count - i + 1)
-        m_ChartsSheet.Cells(nextRow + i, 1).Value = Format(month.MonthDate, "mmm yyyy")
-        m_ChartsSheet.Cells(nextRow + i, 2).Value = month.TotalAmount
-        m_ChartsSheet.Cells(nextRow + i, 3).Value = month.TransactionCount
+        ' Use MonthKey instead of MonthDate, format might need adjustment if parsing needed
+        m_ChartsSheet.Cells(nextRow + i, 1).Value = month.MonthKey ' Use MonthKey
+        m_ChartsSheet.Cells(nextRow + i, 2).Value = month.TotalAmount ' Net Amount
+        m_ChartsSheet.Cells(nextRow + i, 3).Value = month.ExpenseAmount ' Expenses
+        m_ChartsSheet.Cells(nextRow + i, 4).Value = month.IncomeAmount  ' Income
     Next i
-    
+
     ' Create the chart
     Dim chartObj As ChartObject
     Set chartObj = ws.ChartObjects.Add(left, top, width, height)
@@ -181,10 +184,10 @@ Public Function CreateMonthlyColumnChart(ws As Worksheet, left As Double, top As
         ' Set chart type
         .ChartType = xlColumnClustered
         
-        ' Set data source
+        ' Set data source (Plot Expenses only for this example)
         .SetSourceData m_ChartsSheet.Range(m_ChartsSheet.Cells(nextRow, 1), _
-                                          m_ChartsSheet.Cells(nextRow + monthlySummary.Count, 2))
-        
+                                          m_ChartsSheet.Cells(nextRow + monthlySummary.Count, 3)) ' Plot Month vs Expenses
+
         ' Format chart
         .HasTitle = True
         .ChartTitle.Text = title
@@ -192,9 +195,9 @@ Public Function CreateMonthlyColumnChart(ws As Worksheet, left As Double, top As
         ' Format axes
         .Axes(xlCategory).TickLabelPosition = xlTickLabelPositionLow
         .Axes(xlValue).HasTitle = True
-        .Axes(xlValue).AxisTitle.Text = "Amount"
+        .Axes(xlValue).AxisTitle.Text = "Expense Amount" ' Adjusted Title
         .Axes(xlValue).AxisTitle.Orientation = xlUpward
-        
+
         ' Format data labels
         .HasDataTable = False
         
@@ -240,8 +243,8 @@ Public Function CreateDayOfWeekChart(ws As Worksheet, left As Double, top As Dou
     ' Write data to the charts sheet
     m_ChartsSheet.Cells(nextRow, 1).Value = "Day"
     m_ChartsSheet.Cells(nextRow, 2).Value = "Amount"
-    m_ChartsSheet.Cells(nextRow, 3).Value = "Transactions"
-    
+    m_ChartsSheet.Cells(nextRow, 3).Value = "Percentage" ' Use Percentage instead of TransactionCount
+
     m_ChartsSheet.Range(m_ChartsSheet.Cells(nextRow, 1), m_ChartsSheet.Cells(nextRow, 3)).Font.Bold = True
     
     Dim i As Long
@@ -250,7 +253,7 @@ Public Function CreateDayOfWeekChart(ws As Worksheet, left As Double, top As Dou
     For Each day In dowSummary
         m_ChartsSheet.Cells(nextRow + i, 1).Value = day.DayName
         m_ChartsSheet.Cells(nextRow + i, 2).Value = day.TotalAmount
-        m_ChartsSheet.Cells(nextRow + i, 3).Value = day.TransactionCount
+        m_ChartsSheet.Cells(nextRow + i, 3).Value = day.Percentage ' Use Percentage
         i = i + 1
     Next day
     
@@ -321,55 +324,60 @@ Public Function CreateBalanceChart(ws As Worksheet, left As Double, top As Doubl
     Dim balance As BalanceSummary
     balance = balanceCalc.CalculateBalance(repo.Transactions)
     
-    ' Write data to the charts sheet
-    m_ChartsSheet.Cells(nextRow, 1).Value = "Person"
-    m_ChartsSheet.Cells(nextRow, 2).Value = "Paid"
-    m_ChartsSheet.Cells(nextRow, 3).Value = "Share"
-    
-    m_ChartsSheet.Range(m_ChartsSheet.Cells(nextRow, 1), m_ChartsSheet.Cells(nextRow, 3)).Font.Bold = True
-    
-    m_ChartsSheet.Cells(nextRow + 1, 1).Value = AppSettings.User1Name
-    m_ChartsSheet.Cells(nextRow + 1, 2).Value = balance.User1Paid
-    m_ChartsSheet.Cells(nextRow + 1, 3).Value = balance.User1Share
-    
-    m_ChartsSheet.Cells(nextRow + 2, 1).Value = AppSettings.User2Name
-    m_ChartsSheet.Cells(nextRow + 2, 2).Value = balance.User2Paid
-    m_ChartsSheet.Cells(nextRow + 2, 3).Value = balance.User2Share
-    
-    ' Create the chart
+    ' Write data to the charts sheet - Adjusting to use available BalanceSummary data
+    m_ChartsSheet.Cells(nextRow, 1).Value = "Metric"
+    m_ChartsSheet.Cells(nextRow, 2).Value = "Value"
+
+    m_ChartsSheet.Range(m_ChartsSheet.Cells(nextRow, 1), m_ChartsSheet.Cells(nextRow, 2)).Font.Bold = True
+
+    m_ChartsSheet.Cells(nextRow + 1, 1).Value = "Net Balance"
+    m_ChartsSheet.Cells(nextRow + 1, 2).Value = balance.NetBalance
+
+    m_ChartsSheet.Cells(nextRow + 2, 1).Value = "Amount Owed"
+    m_ChartsSheet.Cells(nextRow + 2, 2).Value = balance.OwedAmount
+
+    ' Add who owes whom if available
+    If Len(balance.WhoOwes) > 0 Then
+        m_ChartsSheet.Cells(nextRow + 3, 1).Value = "Summary"
+        m_ChartsSheet.Cells(nextRow + 3, 2).Value = balance.WhoOwes
+    End If
+
+    ' Create the chart - Needs adjustment as Bar chart needs categories/series
+    ' For simplicity, let's just show the Owed Amount for now, maybe vs Net Balance
+    ' Or perhaps better not to chart this directly if Paid/Share aren't available
+
+    ' Option: Chart Owed Amount vs. 0 (less useful)
+    m_ChartsSheet.Cells(nextRow + 5, 1).Value = "Owed" ' Chart Data Start
+    m_ChartsSheet.Cells(nextRow + 5, 2).Value = balance.OwedAmount
+
     Dim chartObj As ChartObject
     Set chartObj = ws.ChartObjects.Add(left, top, width, height)
-    
+
     With chartObj.Chart
-        ' Set chart type
-        .ChartType = xlBarClustered
-        
-        ' Set data source
-        .SetSourceData m_ChartsSheet.Range(m_ChartsSheet.Cells(nextRow, 1), _
-                                          m_ChartsSheet.Cells(nextRow + 2, 3))
-        
+        .ChartType = xlColumnClustered ' Changed to Column for single value
+        .SetSourceData m_ChartsSheet.Range(m_ChartsSheet.Cells(nextRow + 5, 1), m_ChartsSheet.Cells(nextRow + 5, 2))
+        .HasLegend = False ' No legend needed for single series
+
         ' Format chart
         .HasTitle = True
-        .ChartTitle.Text = title
-        
+        .ChartTitle.Text = title & " (Amount Owed)" ' Adjusted Title
+
         ' Format axes
-        .Axes(xlCategory).TickLabelPosition = xlTickLabelPositionLow
+        .Axes(xlCategory).TickLabelPosition = xlTickLabelPositionNone ' Hide category axis label
         .Axes(xlValue).HasTitle = True
         .Axes(xlValue).AxisTitle.Text = "Amount"
-        
+
         ' Format data labels
-        .HasDataTable = True
-        .DataTable.HasBorderOutline = True
-        .DataTable.HasBorderHorizontal = False
-        .DataTable.HasBorderVertical = True
-        
+        .ApplyDataLabels xlDataLabelsShowValue
+
         ' Apply a colorful theme
-        .ChartStyle = 42 ' Modern style
-        
+        .ChartStyle = 48 ' Modern style
+
         ' Apply colors to match BALANCE theme
         .SeriesCollection(1).Format.Fill.ForeColor.RGB = AppSettings.ColorPrimary
-        .SeriesCollection(2).Format.Fill.ForeColor.RGB = AppSettings.ColorAccent
     End With
+
+    ' Removed duplicated/commented out code block that was here previously
     
     Set CreateBalanceChart = chartObj
     

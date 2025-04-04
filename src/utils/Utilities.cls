@@ -435,14 +435,14 @@ End Function
 
 ' ===== Error Handling =====
 
-' Log error to debug window
-Public Sub LogError(functionName As String, errorNumber As Long, errorDescription As String, Optional lineNumber As Long = 0)
+' Log error to debug window (Renamed to avoid conflict with IErrorLogger)
+Public Sub DebugLogError(functionName As String, errorNumber As Long, errorDescription As String, Optional lineNumber As Long = 0)
     Dim errorMsg As String
-    
+
     If lineNumber > 0 Then
-        errorMsg = "ERROR in " & functionName & " (line " & lineNumber & "): " & errorNumber & " - " & errorDescription
+        errorMsg = "DEBUG ERROR in " & functionName & " (line " & lineNumber & "): " & errorNumber & " - " & errorDescription
     Else
-        errorMsg = "ERROR in " & functionName & ": " & errorNumber & " - " & errorDescription
+        errorMsg = "DEBUG ERROR in " & functionName & ": " & errorNumber & " - " & errorDescription
     End If
     
     Debug.Print errorMsg

@@ -10,7 +10,13 @@ Attribute VB_Exposed = False
 Option Explicit
 
 ' BALANCE - Bilateral Accounting Ledger for Analyzing Networked Couple Expenses
-' Transaction Class - Represents a financial transaction
+' Transaction Class - Implements ITransaction interface
+'
+' Purpose: Represents a financial transaction with all its properties and behaviors.
+' This class has been updated to implement the ITransaction interface,
+' following the Interface Segregation Principle.
+
+Implements ITransaction
 
 ' Private member variables
 Private m_ID As String
@@ -374,4 +380,131 @@ End Sub
 ' Class terminate
 Private Sub Class_Terminate()
     ' Nothing to clean up
+End Sub
+
+'=========================================================================
+' ITransaction Interface Implementation
+'=========================================================================
+
+' ID property
+Private Property Get ITransaction_ID() As String
+    ITransaction_ID = ID
+End Property
+
+Private Property Let ITransaction_ID(ByVal value As String)
+    ID = value
+End Property
+
+' TransactionDate property
+Private Property Get ITransaction_TransactionDate() As Date
+    ITransaction_TransactionDate = TransactionDate
+End Property
+
+Private Property Let ITransaction_TransactionDate(ByVal value As Date)
+    TransactionDate = value
+End Property
+
+' Merchant property
+Private Property Get ITransaction_Merchant() As String
+    ITransaction_Merchant = Merchant
+End Property
+
+Private Property Let ITransaction_Merchant(ByVal value As String)
+    Merchant = value
+End Property
+
+' Category property
+Private Property Get ITransaction_Category() As String
+    ITransaction_Category = Category
+End Property
+
+Private Property Let ITransaction_Category(ByVal value As String)
+    Category = value
+End Property
+
+' Amount property
+Private Property Get ITransaction_Amount() As Currency
+    ITransaction_Amount = Amount
+End Property
+
+Private Property Let ITransaction_Amount(ByVal value As Currency)
+    Amount = value
+End Property
+
+' Account property
+Private Property Get ITransaction_Account() As String
+    ITransaction_Account = Account
+End Property
+
+Private Property Let ITransaction_Account(ByVal value As String)
+    Account = value
+End Property
+
+' Owner property
+Private Property Get ITransaction_Owner() As String
+    ITransaction_Owner = Owner
+End Property
+
+Private Property Let ITransaction_Owner(ByVal value As String)
+    Owner = value
+End Property
+
+' IsShared property
+Private Property Get ITransaction_IsShared() As Boolean
+    ITransaction_IsShared = IsShared
+End Property
+
+Private Property Let ITransaction_IsShared(ByVal value As Boolean)
+    IsShared = value
+End Property
+
+' Notes property
+Private Property Get ITransaction_Notes() As String
+    ITransaction_Notes = Notes
+End Property
+
+Private Property Let ITransaction_Notes(ByVal value As String)
+    Notes = value
+End Property
+
+' SourceFile property
+Private Property Get ITransaction_SourceFile() As String
+    ITransaction_SourceFile = SourceFile
+End Property
+
+Private Property Let ITransaction_SourceFile(ByVal value As String)
+    SourceFile = value
+End Property
+
+' IsExpense method
+Private Function ITransaction_IsExpense() As Boolean
+    ITransaction_IsExpense = IsExpense()
+End Function
+
+' IsIncome method
+Private Function ITransaction_IsIncome() As Boolean
+    ITransaction_IsIncome = IsIncome()
+End Function
+
+' GetAbsoluteAmount method
+Private Function ITransaction_GetAbsoluteAmount() As Currency
+    ITransaction_GetAbsoluteAmount = GetAbsoluteAmount()
+End Function
+
+' CalculateSplit method
+Private Sub ITransaction_CalculateSplit(ByRef user1Amount As Currency, ByRef user2Amount As Currency)
+    CalculateSplit user1Amount, user2Amount
+End Sub
+
+' ToDictionary method
+Private Function ITransaction_ToDictionary() As Object
+    Set ITransaction_ToDictionary = ToDictionary()
+End Function
+
+' InitFromRow method
+Private Sub ITransaction_InitFromRow(dateVal As Variant, merchant As Variant, category As Variant, _
+                                   amount As Variant, account As Variant, owner As Variant, _
+                                   isShared As Variant, notes As Variant, sourceFile As Variant)
+    ' Call the public InitFromRow method of this class
+    Me.InitFromRow dateVal, merchant, category, amount, account, owner, isShared, notes, sourceFile
 End Sub

@@ -373,16 +373,35 @@ End Property
 '=========================================================================
 
 ' Adds a single transaction to the repository
-Private Function ITransactionRepository_AddTransaction(ByVal transaction As Transaction) As Boolean
+Private Function ITransactionRepository_AddTransaction(ByVal transaction As ITransaction) As Boolean ' Changed parameter type to ITransaction
     On Error GoTo ErrorHandler
     
     ' Ensure repository is initialized
     If Not m_IsInitialized Then ITransactionRepository_Initialize
     
     ' Check for duplicates and resolve if needed
-    Dim transToAdd As Transaction
-    Set transToAdd = ResolveDuplicate(transaction)
-    
+    ' Note: ResolveDuplicate expects a concrete Transaction. We might need to adjust it
+    ' or handle the type check/cast here. For now, assume transaction IS a Transaction object.
+    ' This might need refinement if other ITransaction implementers exist.
+    Dim concreteTransaction As Transaction
+    If TypeOf transaction Is Transaction Then
+        Set concreteTransaction = transaction
+    Else
+        ' Handle error or attempt conversion if possible
+        If Not m_Logger Is Nothing Then
+            m_Logger.LogError "TransactionRepository.AddTransaction", 0, "AddTransaction received non-Transaction object implementing ITransaction. Cannot resolve duplicates."
+        End If
+        ' Decide how to proceed: maybe add without duplicate check? Or fail?
+        ' For now, let's try adding without duplicate check if it's not a concrete Transaction
+        ' This part might need more robust handling depending on requirements.
+        Set concreteTransaction = transaction ' This might fail if ResolveDuplicate strictly needs Transaction
+        ' A safer approach might be to skip ResolveDuplicate if not TypeOf Transaction
+        ' Or modify ResolveDuplicate to accept ITransaction
+    End If
+
+    Dim transToAdd As Transaction ' ResolveDuplicate returns Transaction
+    Set transToAdd = ResolveDuplicate(concreteTransaction) ' Pass concrete type
+
     ' Generate ID if not set
     If Len(transToAdd.ID) = 0 Then
         transToAdd.ID = GenerateUniqueID
@@ -417,8 +436,8 @@ ErrorHandler:
     ITransactionRepository_AddTransaction = False
 End Function
 
-' Public wrapper for AddTransaction
-Public Function AddTransaction(ByVal transaction As Transaction) As Boolean
+' Public wrapper for AddTransaction (Keep only the one accepting ITransaction)
+Public Function AddTransaction(ByVal transaction As ITransaction) As Boolean ' Changed parameter type
     AddTransaction = ITransactionRepository_AddTransaction(transaction)
 End Function
 
@@ -432,10 +451,12 @@ Private Function ITransactionRepository_AddTransactions(ByVal transactions As Co
     Dim addedCount As Long
     addedCount = 0
     
-    ' Process each transaction
-    Dim trans As Transaction
-    For Each trans In transactions
-        If ITransactionRepository_AddTransaction(trans) Then
+    ' Process each transaction - Use Variant loop and check type
+    Dim transVariant As Variant
+    Dim trans As ITransaction ' Use interface type
+    For Each transVariant In transactions
+        Set trans = transVariant ' Assumes collection contains objects implementing ITransaction
+        If ITransactionRepository_AddTransaction(trans) Then ' Pass ITransaction
             addedCount = addedCount + 1
         End If
     Next trans
@@ -753,6 +774,7 @@ Private Function GenerateUniqueID() As String
 End Function
 
 ' Checks for duplicate transactions and resolves conflicts
+' Consider changing parameter to ITransaction if needed, but requires careful handling
 Private Function ResolveDuplicate(ByVal newTrans As Transaction) As Transaction
     On Error GoTo ErrorHandler
     

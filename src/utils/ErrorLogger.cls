@@ -28,14 +28,6 @@ Option Explicit
 ' Interface implementation
 Implements IErrorLogger
 
-' Log level enum definition
-Public Enum LogLevel
-    LogLevel_Error = 1
-    LogLevel_Warning = 2
-    LogLevel_Info = 3
-    LogLevel_Debug = 4
-End Enum
-
 ' Constants for log sheet and table
 Private Const LOG_SHEET_NAME As String = "ErrorLog"
 Private Const LOG_TABLE_NAME As String = "LogTable"
@@ -319,8 +311,8 @@ Private Function IErrorLogger_ExportLog(ByVal filePath As String) As Boolean
     
     ' Make a copy of the log sheet
     Dim tempSheet As Worksheet
-    m_LogSheet.Copy
-    Set tempSheet = ActiveSheet
+    m_LogSheet.Copy Before:=ThisWorkbook.Sheets(1) ' Copy before first sheet
+    Set tempSheet = ThisWorkbook.Sheets(1) ' Reference the newly copied sheet directly
     
     ' Make the sheet visible
     tempSheet.Visible = xlSheetVisible

@@ -82,8 +82,8 @@ Private Sub IDashboardManager_Initialize(Optional ByVal repository As ITransacti
     ' Get or create the dashboard sheet
     Set m_DashboardSheet = GetOrCreateDashboardSheet()
     
-    ' Initialize chart factory
-    Set m_ChartFactory = New ChartFactory
+    ' Initialize chart factory (Use PredeclaredId instance)
+    Set m_ChartFactory = ChartFactory ' Changed New ChartFactory to ChartFactory
     m_ChartFactory.Initialize m_Logger
     
     ' Subscribe to events
@@ -405,8 +405,8 @@ Private Sub IDashboardManager_UpdateCategorySummary()
         End If
     Next category
     
-    ' Create the chart
-    m_ChartFactory.CreatePieChart m_DashboardSheet, "B11:E24", chartData, "Spending by Category", CATEGORY_CHART_NAME
+    ' Create the chart (Use correct method name)
+    m_ChartFactory.CreateCategoryPieChart m_DashboardSheet, "B11:E24", chartData, "Spending by Category", CATEGORY_CHART_NAME
     
     ' Publish category data changed event with the summary data
     EventManager.PublishEventWithData EventType.CategoryDataChanged, categorySummary
@@ -476,10 +476,10 @@ Private Sub IDashboardManager_UpdateMonthlySpending()
         chartData.Add displayMonth, expense
     Next month
     
-    ' Create the chart
-    m_ChartFactory.CreateColumnChart m_DashboardSheet, "F11:I24", chartData, _
-                                    "Monthly Spending", MONTHLY_CHART_NAME, _
-                                    "Month", "Amount"
+    ' Create the chart (Use correct method name)
+    m_ChartFactory.CreateMonthlyColumnChart m_DashboardSheet, "F11:I24", chartData, _
+                                    "Monthly Spending", MONTHLY_CHART_NAME
+                                    ' Removed axis titles as they are handled within the factory method now
     
     Exit Sub
     
@@ -537,10 +537,10 @@ Private Sub IDashboardManager_UpdateDayOfWeekSpending()
         End If
     Next i
     
-    ' Create the chart
-    m_ChartFactory.CreateColumnChart m_DashboardSheet, "B26:E38", chartData, _
-                                    "Spending by Day of Week", DAILY_CHART_NAME, _
-                                    "Day", "Amount"
+    ' Create the chart (Use correct method name)
+    m_ChartFactory.CreateDayOfWeekChart m_DashboardSheet, "B26:E38", chartData, _
+                                    "Spending by Day of Week", DAILY_CHART_NAME
+                                    ' Removed axis titles as they are handled within the factory method now
     
     Exit Sub
     

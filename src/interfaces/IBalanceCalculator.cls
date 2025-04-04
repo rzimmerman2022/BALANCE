@@ -14,9 +14,11 @@ Option Explicit
 ' BALANCE - Bilateral Accounting Ledger for Analyzing Networked Couple Expenses
 ' IBalanceCalculator Interface
 '
-' Purpose: Defines the contract for calculating balances and financial summaries.
-' This interface abstracts the balance calculation logic, allowing for different
-' implementations or testing versions to be substituted as needed.
+' Purpose: Defines the contract for calculating core balance functionality.
+' This interface has been refactored to focus only on balance calculations,
+' with other analysis functions moved to more specialized interfaces
+' (ICategoryAnalyzer, ITimeAnalyzer, ITrendAnalyzer) to better follow
+' the Interface Segregation Principle.
 
 ' Calculate the overall balance between users
 Public Function CalculateBalance(ByVal transactions As Collection) As Double
@@ -24,34 +26,6 @@ End Function
 
 ' Calculate who owes whom and how much
 Public Function CalculateBalanceSummary(ByVal transactions As Collection) As Object ' Dictionary
-End Function
-
-' Calculate spending by category
-Public Function CalculateCategorySummary(ByVal transactions As Collection, _
-                                         Optional ByVal startDate As Date, _
-                                         Optional ByVal endDate As Date) As Object ' Dictionary
-End Function
-
-' Calculate spending by day of week
-Public Function CalculateDayOfWeekSummary(ByVal transactions As Collection, _
-                                         Optional ByVal startDate As Date, _
-                                         Optional ByVal endDate As Date) As Object ' Dictionary
-End Function
-
-' Calculate spending by month
-Public Function CalculateMonthSummary(ByVal transactions As Collection, _
-                                     Optional ByVal monthCount As Integer = 12) As Object ' Dictionary
-End Function
-
-' Calculate daily average spending
-Public Function CalculateDailyAverageSpending(ByVal transactions As Collection, _
-                                             Optional ByVal startDate As Date, _
-                                             Optional ByVal endDate As Date) As Double
-End Function
-
-' Calculate spending trends (month-over-month changes)
-Public Function CalculateSpendingTrends(ByVal transactions As Collection, _
-                                       Optional ByVal monthCount As Integer = 12) As Object ' Dictionary
 End Function
 
 ' Initialize the calculator with dependencies

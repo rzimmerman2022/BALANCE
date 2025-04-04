@@ -4,6 +4,71 @@ Option Explicit
 ' BALANCE - Bilateral Accounting Ledger for Analyzing Networked Couple Expenses
 ' Main module - Entry points and global functions
 
+' ===== Public Type Definitions =====
+
+' Log levels enum (Moved from ErrorLogger.cls)
+Public Enum LogLevel
+    LogLevel_Error = 1
+    LogLevel_Warning = 2
+    LogLevel_Info = 3
+    LogLevel_Debug = 4
+End Enum
+
+' Event types enum (Moved from EventManager.cls)
+Public Enum EventType
+    TransactionsChanged = 1
+    BalanceUpdated = 2
+    CategoryDataChanged = 3
+    ImportCompleted = 4
+    SettingsChanged = 5
+    ExportCompleted = 6
+    FilterApplied = 7
+    ViewChanged = 8
+    DashboardRefreshed = 9
+    ' Add more event types as needed
+End Enum
+
+' For TransactionAnalyzer results
+Public Type CategorySummary
+    Category As String
+    TotalAmount As Currency
+    Percentage As Double
+End Type
+
+Public Type MonthSummary
+    MonthKey As String ' yyyy-mm
+    TotalAmount As Currency
+    IncomeAmount As Currency
+    ExpenseAmount As Currency
+End Type
+
+Public Type DayOfWeekSummary
+    DayName As String
+    TotalAmount As Currency
+    Percentage As Double
+End Type
+
+Public Type BalanceSummary
+    NetBalance As Currency
+    OwedAmount As Currency
+    OwingUser As String
+    OwedUser As String
+    WhoOwes As String ' Formatted string like "User1 owes User2 $X.XX"
+End Type
+
+' For CSVImportEngine results
+Public Type ImportResult
+    Success As Boolean
+    TransactionsAdded As Long
+    DuplicatesSkipped As Long
+    ErrorsEncountered As Long
+    ElapsedSeconds As Double
+    ErrorMessages As Collection ' Collection of error strings
+    ImportedFiles As Collection ' Collection of file paths successfully imported
+End Type
+
+' ===== End Public Type Definitions =====
+
 ' Initialize the BALANCE system
 Public Sub InitializeBALANCE()
     On Error GoTo ErrorHandler
@@ -121,13 +186,13 @@ Private Sub ImportSingleCSV()
         ' Cancelled
         Exit Sub
     End If
-    
+
     ' Get CSVImportEngine
     Dim csvEngine As CSVImportEngine
-    Set csvEngine = CSVImportEngine
-    csvEngine.Initialize
-    
-    ' Set default owner
+    Set csvEngine = CSVImportEngine ' Assumes PredeclaredId=True
+    ' csvEngine.Initialize ' Initialization might be handled elsewhere or implicitly
+
+    ' Set default owner (Example - might need adjustment based on actual flow)
     csvEngine.DefaultOwner = owner
     
     ' Import file
@@ -187,13 +252,13 @@ Private Sub ImportCSVFolder()
         ' Cancelled
         Exit Sub
     End If
-    
+
     ' Get CSVImportEngine
     Dim csvEngine As CSVImportEngine
-    Set csvEngine = CSVImportEngine
-    csvEngine.Initialize
-    
-    ' Set default owner
+    Set csvEngine = CSVImportEngine ' Assumes PredeclaredId=True
+    ' csvEngine.Initialize ' Initialization might be handled elsewhere or implicitly
+
+    ' Set default owner (Example - might need adjustment based on actual flow)
     csvEngine.DefaultOwner = owner
     
     ' Import folder

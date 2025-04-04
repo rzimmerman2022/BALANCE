@@ -384,18 +384,6 @@ Private Sub CreateSettingsSheet()
     Set ws = Nothing
     
     On Error GoTo 0
-End Sub
-
-' Check if sheet exists
-Private Function SheetExists(sheetName As String) As Boolean
-    Dim ws As Worksheet
-    
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets(sheetName)
-    On Error GoTo 0
-    
-    SheetExists = Not ws Is Nothing
-    Set ws = Nothing
 End Function
 
 ' Class initialize event

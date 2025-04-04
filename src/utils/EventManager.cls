@@ -29,20 +29,6 @@ Option Explicit
 ' Constants
 Private Const MAX_SUBSCRIBERS As Integer = 100
 
-' Define standard event types
-Public Enum EventType
-    TransactionsChanged = 1
-    BalanceUpdated = 2
-    CategoryDataChanged = 3
-    ImportCompleted = 4
-    SettingsChanged = 5
-    ExportCompleted = 6
-    FilterApplied = 7
-    ViewChanged = 8
-    DashboardRefreshed = 9
-    ' Add more event types as needed
-End Enum
-
 ' Type to hold subscriber information
 Private Type Subscriber
     EventType As EventType
