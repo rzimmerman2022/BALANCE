@@ -1,0 +1,38 @@
+# Excel temporary files
+~$*.xls*
+~$*.xlsx
+~$*.xlsm
+~$*.xlsb
+
+# Excel backup files
+*.xlk
+*.bak
+
+# Compiled VBA files (if applicable)
+*.exe
+*.dll
+*.pdb
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# BALANCE application specific
+/logs/
+/data/exports/
+/temp/
+*.csv
+*.log
+
+# Keep example CSV files if needed for testing
+!/examples/*.csv
