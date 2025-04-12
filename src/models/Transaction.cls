@@ -37,7 +37,7 @@ Public Property Get ID() As String
     ID = m_ID
 End Property
 
-Public Property Let ID(value As String)
+Public Property Let ID(value As String) ' Implicit ByRef
     m_ID = value
 End Property
 
@@ -46,7 +46,7 @@ Public Property Get TransactionDate() As Date
     TransactionDate = m_Date
 End Property
 
-Public Property Let TransactionDate(value As Date)
+Public Property Let TransactionDate(value As Date) ' Implicit ByRef
     m_Date = value
 End Property
 
@@ -55,7 +55,7 @@ Public Property Get Merchant() As String
     Merchant = m_Merchant
 End Property
 
-Public Property Let Merchant(value As String)
+Public Property Let Merchant(value As String) ' Implicit ByRef
     m_Merchant = value
 End Property
 
@@ -64,7 +64,7 @@ Public Property Get Category() As String
     Category = m_Category
 End Property
 
-Public Property Let Category(value As String)
+Public Property Let Category(value As String) ' Implicit ByRef
     m_Category = value
 End Property
 
@@ -73,7 +73,7 @@ Public Property Get Amount() As Currency
     Amount = m_Amount
 End Property
 
-Public Property Let Amount(value As Currency)
+Public Property Let Amount(value As Currency) ' Implicit ByRef
     m_Amount = value
 End Property
 
@@ -82,7 +82,7 @@ Public Property Get Account() As String
     Account = m_Account
 End Property
 
-Public Property Let Account(value As String)
+Public Property Let Account(value As String) ' Implicit ByRef
     m_Account = value
 End Property
 
@@ -91,7 +91,7 @@ Public Property Get Owner() As String
     Owner = m_Owner
 End Property
 
-Public Property Let Owner(value As String)
+Public Property Let Owner(value As String) ' Implicit ByRef
     m_Owner = value
 End Property
 
@@ -100,7 +100,7 @@ Public Property Get IsShared() As Boolean
     IsShared = m_IsShared
 End Property
 
-Public Property Let IsShared(value As Boolean)
+Public Property Let IsShared(value As Boolean) ' Implicit ByRef
     m_IsShared = value
 End Property
 
@@ -109,7 +109,7 @@ Public Property Get Notes() As String
     Notes = m_Notes
 End Property
 
-Public Property Let Notes(value As String)
+Public Property Let Notes(value As String) ' Implicit ByRef
     m_Notes = value
 End Property
 
@@ -118,7 +118,7 @@ Public Property Get SourceFile() As String
     SourceFile = m_SourceFile
 End Property
 
-Public Property Let SourceFile(value As String)
+Public Property Let SourceFile(value As String) ' Implicit ByRef
     m_SourceFile = value
 End Property
 
@@ -209,8 +209,8 @@ End Function
 
 ' Initialize a transaction from row data
 Public Sub InitFromRow(dateVal As Variant, merchant As Variant, category As Variant, _
-                      amount As Variant, account As Variant, owner As Variant, _
-                      isShared As Variant, notes As Variant, sourceFile As Variant)
+                       amount As Variant, account As Variant, owner As Variant, _
+                       isShared As Variant, notes As Variant, sourceFile As Variant)
     On Error GoTo ErrorHandler
     
     ' Generate a unique ID if not already set
@@ -391,7 +391,8 @@ Private Property Get ITransaction_ID() As String
     ITransaction_ID = ID
 End Property
 
-Private Property Let ITransaction_ID(ByVal value As String)
+' ***** CORRECTED LINE BELOW *****
+Private Property Let ITransaction_ID(value As String) ' Removed ByVal
     ID = value
 End Property
 
@@ -400,7 +401,7 @@ Private Property Get ITransaction_TransactionDate() As Date
     ITransaction_TransactionDate = TransactionDate
 End Property
 
-Private Property Let ITransaction_TransactionDate(ByVal value As Date)
+Private Property Let ITransaction_TransactionDate(value As Date) ' Removed ByVal
     TransactionDate = value
 End Property
 
@@ -409,7 +410,7 @@ Private Property Get ITransaction_Merchant() As String
     ITransaction_Merchant = Merchant
 End Property
 
-Private Property Let ITransaction_Merchant(ByVal value As String)
+Private Property Let ITransaction_Merchant(value As String) ' Removed ByVal
     Merchant = value
 End Property
 
@@ -418,7 +419,7 @@ Private Property Get ITransaction_Category() As String
     ITransaction_Category = Category
 End Property
 
-Private Property Let ITransaction_Category(ByVal value As String)
+Private Property Let ITransaction_Category(value As String) ' Removed ByVal
     Category = value
 End Property
 
@@ -427,7 +428,7 @@ Private Property Get ITransaction_Amount() As Currency
     ITransaction_Amount = Amount
 End Property
 
-Private Property Let ITransaction_Amount(ByVal value As Currency)
+Private Property Let ITransaction_Amount(value As Currency) ' Removed ByVal
     Amount = value
 End Property
 
@@ -436,7 +437,7 @@ Private Property Get ITransaction_Account() As String
     ITransaction_Account = Account
 End Property
 
-Private Property Let ITransaction_Account(ByVal value As String)
+Private Property Let ITransaction_Account(value As String) ' Removed ByVal
     Account = value
 End Property
 
@@ -445,7 +446,7 @@ Private Property Get ITransaction_Owner() As String
     ITransaction_Owner = Owner
 End Property
 
-Private Property Let ITransaction_Owner(ByVal value As String)
+Private Property Let ITransaction_Owner(value As String) ' Removed ByVal
     Owner = value
 End Property
 
@@ -454,7 +455,7 @@ Private Property Get ITransaction_IsShared() As Boolean
     ITransaction_IsShared = IsShared
 End Property
 
-Private Property Let ITransaction_IsShared(ByVal value As Boolean)
+Private Property Let ITransaction_IsShared(value As Boolean) ' Removed ByVal
     IsShared = value
 End Property
 
@@ -463,7 +464,7 @@ Private Property Get ITransaction_Notes() As String
     ITransaction_Notes = Notes
 End Property
 
-Private Property Let ITransaction_Notes(ByVal value As String)
+Private Property Let ITransaction_Notes(value As String) ' Removed ByVal
     Notes = value
 End Property
 
@@ -472,7 +473,7 @@ Private Property Get ITransaction_SourceFile() As String
     ITransaction_SourceFile = SourceFile
 End Property
 
-Private Property Let ITransaction_SourceFile(ByVal value As String)
+Private Property Let ITransaction_SourceFile(value As String) ' Removed ByVal
     SourceFile = value
 End Property
 

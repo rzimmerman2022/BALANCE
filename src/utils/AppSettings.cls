@@ -13,22 +13,22 @@ Option Explicit
 ' Application Settings Class - Singleton pattern for application settings
 
 ' Constants
-Private Const DEFAULT_CSV_PATH As String = "C:\Finance\CSVs"
+Private Const DEFAULT_CSV_PATH As String = "C:\Finance\CSVs" ' Default Path Example
 Private Const SETTINGS_SHEET_NAME As String = "Settings"
 Private Const APP_TITLE As String = "BALANCE"
 Private Const APP_SUBTITLE As String = "Bilateral Accounting Ledger for Analyzing Networked Couple Expenses"
 
 ' Color constants
-Private Const COLOR_PRIMARY_RGB As String = "41,128,185"    ' Blue
-Private Const COLOR_SECONDARY_RGB As String = "39,174,96"   ' Green
-Private Const COLOR_ACCENT_RGB As String = "243,156,18"     ' Orange
-Private Const COLOR_NEUTRAL_RGB As String = "236,240,241"   ' Light Gray
-Private Const COLOR_DARK_RGB As String = "52,73,94"         ' Dark Blue-Gray
-Private Const COLOR_SUCCESS_RGB As String = "46,204,113"    ' Green
-Private Const COLOR_WARNING_RGB As String = "241,196,15"    ' Yellow
-Private Const COLOR_DANGER_RGB As String = "231,76,60"      ' Red
-Private Const COLOR_INFO_RGB As String = "52,152,219"       ' Light Blue
-Private Const COLOR_TEXT_RGB As String = "44,62,80"         ' Dark Text
+Private Const COLOR_PRIMARY_RGB As String = "41,128,185"   ' Blue
+Private Const COLOR_SECONDARY_RGB As String = "39,174,96"  ' Green
+Private Const COLOR_ACCENT_RGB As String = "243,156,18"    ' Orange
+Private Const COLOR_NEUTRAL_RGB As String = "236,240,241"  ' Light Gray
+Private Const COLOR_DARK_RGB As String = "52,73,94"        ' Dark Blue-Gray
+Private Const COLOR_SUCCESS_RGB As String = "46,204,113"   ' Green
+Private Const COLOR_WARNING_RGB As String = "241,196,15"   ' Yellow
+Private Const COLOR_DANGER_RGB As String = "231,76,60"    ' Red
+Private Const COLOR_INFO_RGB As String = "52,152,219"     ' Light Blue
+Private Const COLOR_TEXT_RGB As String = "44,62,80"        ' Dark Text
 Private Const COLOR_LIGHT_TEXT_RGB As String = "236,240,241" ' Light Text
 
 ' Private variables
@@ -72,7 +72,7 @@ End Property
 
 Public Property Let User1Name(value As String)
     m_User1Name = value
-    SaveSettings
+    SaveSettings ' Call SaveSettings to persist change
 End Property
 
 ' User 2 Name
@@ -83,7 +83,7 @@ End Property
 
 Public Property Let User2Name(value As String)
     m_User2Name = value
-    SaveSettings
+    SaveSettings ' Call SaveSettings to persist change
 End Property
 
 ' CSV Folder Path
@@ -94,7 +94,7 @@ End Property
 
 Public Property Let CSVFolderPath(value As String)
     m_CSVFolderPath = value
-    SaveSettings
+    SaveSettings ' Call SaveSettings to persist change
 End Property
 
 ' Default Currency
@@ -105,7 +105,7 @@ End Property
 
 Public Property Let DefaultCurrency(value As String)
     m_DefaultCurrency = value
-    SaveSettings
+    SaveSettings ' Call SaveSettings to persist change
 End Property
 
 ' Last Update Date
@@ -116,7 +116,7 @@ End Property
 
 Public Property Let LastUpdateDate(value As Date)
     m_LastUpdateDate = value
-    SaveSettings
+    SaveSettings ' Call SaveSettings to persist change
 End Property
 
 ' Settings Sheet Name
@@ -183,7 +183,7 @@ End Property
 ' ===== Methods =====
 ' Initialize settings
 Public Sub Initialize()
-    On Error Resume Next
+    On Error Resume Next ' Use Resume Next carefully
     
     ' Initialize colors first
     InitializeColors
@@ -193,65 +193,69 @@ Public Sub Initialize()
     
     m_IsInitialized = True
     
-    On Error GoTo 0
+    On Error GoTo 0 ' Restore default error handling
 End Sub
 
 ' Initialize color values
 Private Sub InitializeColors()
+    On Error Resume Next ' Handle potential errors in Split or RGB gracefully
     Dim rgbArr As Variant
     
     ' Primary color
     rgbArr = Split(COLOR_PRIMARY_RGB, ",")
-    m_ColorPrimary = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorPrimary = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorPrimary = RGB(0, 0, 255) ' Default Blue
     
     ' Secondary color
     rgbArr = Split(COLOR_SECONDARY_RGB, ",")
-    m_ColorSecondary = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorSecondary = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorSecondary = RGB(0, 255, 0) ' Default Green
     
     ' Accent color
     rgbArr = Split(COLOR_ACCENT_RGB, ",")
-    m_ColorAccent = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorAccent = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorAccent = RGB(255, 165, 0) ' Default Orange
     
     ' Neutral color
     rgbArr = Split(COLOR_NEUTRAL_RGB, ",")
-    m_ColorNeutral = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorNeutral = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorNeutral = RGB(211, 211, 211) ' Default Light Gray
     
     ' Dark color
     rgbArr = Split(COLOR_DARK_RGB, ",")
-    m_ColorDark = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorDark = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorDark = RGB(0, 0, 128) ' Default Navy
     
     ' Success color
     rgbArr = Split(COLOR_SUCCESS_RGB, ",")
-    m_ColorSuccess = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorSuccess = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorSuccess = RGB(0, 128, 0) ' Default Green
     
     ' Warning color
     rgbArr = Split(COLOR_WARNING_RGB, ",")
-    m_ColorWarning = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorWarning = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorWarning = RGB(255, 255, 0) ' Default Yellow
     
     ' Danger color
     rgbArr = Split(COLOR_DANGER_RGB, ",")
-    m_ColorDanger = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorDanger = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorDanger = RGB(255, 0, 0) ' Default Red
     
     ' Info color
     rgbArr = Split(COLOR_INFO_RGB, ",")
-    m_ColorInfo = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorInfo = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorInfo = RGB(0, 191, 255) ' Default Deep Sky Blue
     
     ' Text color
     rgbArr = Split(COLOR_TEXT_RGB, ",")
-    m_ColorText = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorText = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorText = RGB(0, 0, 0) ' Default Black
     
     ' Light text color
     rgbArr = Split(COLOR_LIGHT_TEXT_RGB, ",")
-    m_ColorLightText = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2)))
+    If UBound(rgbArr) = 2 Then m_ColorLightText = RGB(CInt(rgbArr(0)), CInt(rgbArr(1)), CInt(rgbArr(2))) Else m_ColorLightText = RGB(255, 255, 255) ' Default White
+    
+    On Error GoTo 0 ' Restore default error handling
 End Sub
+
 
 ' Load settings from sheet
 Public Sub LoadSettings()
-    On Error Resume Next
+    On Error Resume Next ' Use Resume Next to handle cases where sheet or settings don't exist
     
     Dim ws As Worksheet
     
-    ' Set default values
+    ' Set default values first
     m_User1Name = "User 1"
     m_User2Name = "User 2"
     m_CSVFolderPath = DEFAULT_CSV_PATH
@@ -259,132 +263,165 @@ Public Sub LoadSettings()
     m_LastUpdateDate = Now
     
     ' Try to load from settings sheet if it exists
-    If SheetExists(SETTINGS_SHEET_NAME) Then
+    ' ***** CORRECTED LINE BELOW *****
+    If Utilities.SheetExists(SETTINGS_SHEET_NAME) Then
         Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET_NAME)
         
-        ' Read settings with error handling
-        On Error Resume Next
-        
-        ' User names
-        If Not IsEmpty(ws.Range("B3").value) Then
-            m_User1Name = ws.Range("B3").value
-        End If
-        
-        If Not IsEmpty(ws.Range("B4").value) Then
-            m_User2Name = ws.Range("B4").value
-        End If
-        
-        ' CSV folder path
-        If Not IsEmpty(ws.Range("B2").value) Then
-            m_CSVFolderPath = ws.Range("B2").value
-        End If
-        
-        ' Default currency (if exists)
-        If Not IsEmpty(ws.Range("B5").value) Then
-            m_DefaultCurrency = ws.Range("B5").value
-        End If
-        
-        ' Last update date (if exists)
-        If Not IsEmpty(ws.Range("B6").value) Then
-            If IsDate(ws.Range("B6").value) Then
-                m_LastUpdateDate = ws.Range("B6").value
-            End If
-        End If
-        
+        ' Read settings with error handling (Resume Next is active)
+        m_User1Name = CStr(ws.Range("B3").Value)
+        m_User2Name = CStr(ws.Range("B4").Value)
+        m_CSVFolderPath = CStr(ws.Range("B2").Value)
+        m_DefaultCurrency = CStr(ws.Range("B5").Value)
+        m_LastUpdateDate = CDate(ws.Range("B6").Value)
+
+        ' Reset to defaults if loaded values are empty or invalid
+        If Len(Trim$(m_User1Name)) = 0 Or Err.Number <> 0 Then m_User1Name = "User 1": Err.Clear
+        If Len(Trim$(m_User2Name)) = 0 Or Err.Number <> 0 Then m_User2Name = "User 2": Err.Clear
+        If Len(Trim$(m_CSVFolderPath)) = 0 Or Err.Number <> 0 Then m_CSVFolderPath = DEFAULT_CSV_PATH: Err.Clear
+        If Len(Trim$(m_DefaultCurrency)) = 0 Or Err.Number <> 0 Then m_DefaultCurrency = "$": Err.Clear
+        If Err.Number <> 0 Then m_LastUpdateDate = Now: Err.Clear ' Check specifically for date error
+                
         Set ws = Nothing
-        On Error GoTo 0
+    Else
+        ' If settings sheet doesn't exist, ensure defaults are set (already done above)
+        ' Optionally, create the sheet now with defaults
+        ' CreateSettingsSheet ' Uncomment if you want to create sheet on first load
     End If
     
-    On Error GoTo 0
+    On Error GoTo 0 ' Restore default error handling
 End Sub
+
 
 ' Save settings to sheet
 Public Sub SaveSettings()
-    On Error Resume Next
+    On Error Resume Next ' Use Resume Next carefully
     
     Dim ws As Worksheet
     
     ' Create settings sheet if it doesn't exist
-    If Not SheetExists(SETTINGS_SHEET_NAME) Then
+    ' ***** CORRECTED LINE BELOW *****
+    If Not Utilities.SheetExists(SETTINGS_SHEET_NAME) Then
         CreateSettingsSheet
+        ' Check if CreateSettingsSheet failed
+        If Err.Number <> 0 Then
+            Debug.Print "Error creating settings sheet in SaveSettings: " & Err.Description
+            Exit Sub
+        End If
     End If
     
+    ' Get the sheet (it should exist now)
     Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET_NAME)
-    
-    ' Save all settings
-    ws.Range("B2").value = m_CSVFolderPath
-    ws.Range("B3").value = m_User1Name
-    ws.Range("B4").value = m_User2Name
-    ws.Range("B5").value = m_DefaultCurrency
-    ws.Range("B6").value = Now
+    If ws Is Nothing Then
+         Debug.Print "Failed to get settings sheet in SaveSettings."
+         Exit Sub
+    End If
+
+    ' Save all settings (disable events briefly for performance)
+    Application.EnableEvents = False
+    ws.Range("B2").Value = m_CSVFolderPath
+    ws.Range("B3").Value = m_User1Name
+    ws.Range("B4").Value = m_User2Name
+    ws.Range("B5").Value = m_DefaultCurrency
+    ws.Range("B6").Value = Now ' Always save current time on save
     
     ' Format date
     ws.Range("B6").NumberFormat = "mm/dd/yyyy hh:mm:ss"
+    Application.EnableEvents = True
     
     Set ws = Nothing
     
-    On Error GoTo 0
+    ' Publish settings changed event
+    EventManager.PublishEvent EventType.SettingsChanged
+    
+    On Error GoTo 0 ' Restore default error handling
 End Sub
+
 
 ' Create settings sheet with default values
 Private Sub CreateSettingsSheet()
-    On Error Resume Next
+    On Error GoTo ErrorHandler ' Use GoTo for specific error handling here
     
     Dim ws As Worksheet
     
     ' Add the sheet
-    Set ws = ThisWorkbook.Worksheets.Add
+    Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count)) ' Add as last sheet
     
-    If Not ws Is Nothing Then
-        ' Rename the sheet
-        ws.Name = SETTINGS_SHEET_NAME
-        
-        ' Setup header
-        ws.Range("A1").value = "Setting"
-        ws.Range("B1").value = "Value"
-        ws.Range("A1:B1").Font.Bold = True
-        ws.Range("A1:B1").Interior.Color = m_ColorPrimary
-        ws.Range("A1:B1").Font.Color = m_ColorLightText
-        
-        ' Settings rows
-        ws.Range("A2").value = "CSV Folder Path"
-        ws.Range("B2").value = m_CSVFolderPath
-        
-        ws.Range("A3").value = "User 1 Name"
-        ws.Range("B3").value = m_User1Name
-        
-        ws.Range("A4").value = "User 2 Name"
-        ws.Range("B4").value = m_User2Name
-        
-        ws.Range("A5").value = "Default Currency"
-        ws.Range("B5").value = m_DefaultCurrency
-        
-        ws.Range("A6").value = "Last Update"
-        ws.Range("B6").value = Now
-        ws.Range("B6").NumberFormat = "mm/dd/yyyy hh:mm:ss"
-        
-        ' Add user interface section
-        ws.Range("A8").value = "User Interface Settings"
-        ws.Range("A8").Font.Bold = True
-        ws.Range("A8").Interior.Color = m_ColorNeutral
-        
-        ws.Range("A9").value = "Auto-refresh on Open"
-        ws.Range("B9").value = False
-        
-        ' Format
-        ws.Range("A:A").Font.Bold = True
-        ws.Columns("A:B").AutoFit
-        
-        ' Add borders
-        ws.Range("A1:B9").Borders.LineStyle = xlContinuous
-        ws.Range("A1:B9").Borders.Weight = xlThin
-        ws.Range("A1:B9").Borders.Color = RGB(191, 191, 191)
+    If ws Is Nothing Then Err.Raise vbObjectError + 513, "AppSettings.CreateSettingsSheet", "Failed to add worksheet."
+
+    ' Rename the sheet
+    On Error Resume Next ' Handle potential error if name already exists (shouldn't happen if SheetExists was checked)
+    ws.Name = SETTINGS_SHEET_NAME
+    If Err.Number <> 0 Then
+        Application.DisplayAlerts = False
+        ws.Delete ' Clean up partially created sheet if rename fails
+        Application.DisplayAlerts = True
+        Err.Raise vbObjectError + 514, "AppSettings.CreateSettingsSheet", "Failed to rename worksheet to '" & SETTINGS_SHEET_NAME & "'. It might already exist or be invalid."
     End If
+    On Error GoTo ErrorHandler ' Restore error handling
+
+    ' Setup header
+    With ws.Range("A1:B1")
+        .Value = Array("Setting", "Value")
+        .Font.Bold = True
+        .Interior.Color = m_ColorPrimary ' Assumes colors are initialized
+        .Font.Color = m_ColorLightText
+    End With
+    
+    ' Settings rows
+    ws.Range("A2").Value = "CSV Folder Path"
+    ws.Range("B2").Value = m_CSVFolderPath
+    
+    ws.Range("A3").Value = "User 1 Name"
+    ws.Range("B3").Value = m_User1Name
+    
+    ws.Range("A4").Value = "User 2 Name"
+    ws.Range("B4").Value = m_User2Name
+    
+    ws.Range("A5").Value = "Default Currency"
+    ws.Range("B5").Value = m_DefaultCurrency
+    
+    ws.Range("A6").Value = "Last Update"
+    ws.Range("B6").Value = Now
+    ws.Range("B6").NumberFormat = "mm/dd/yyyy hh:mm:ss"
+    
+    ' Add user interface section (Example - adapt as needed)
+    ws.Range("A8").Value = "User Interface Settings"
+    ws.Range("A8").Font.Bold = True
+    ws.Range("A8").Interior.Color = m_ColorNeutral
+    
+    ws.Range("A9").Value = "Auto-refresh on Open"
+    ws.Range("B9").Value = False ' Default value
+    
+    ' Format
+    ws.Range("A:A").Font.Bold = True
+    ws.Columns("A:B").AutoFit
+    
+    ' Add borders
+    With ws.Range("A1:B9").Borders
+        .LineStyle = xlContinuous
+        .Weight = xlThin
+        .Color = RGB(191, 191, 191)
+    End With
+
+    ' Hide the sheet
+    ws.Visible = xlSheetVeryHidden
     
     Set ws = Nothing
-    
-    On Error GoTo 0
-End Function
+    Exit Sub
+
+ErrorHandler:
+    Debug.Print "Error in AppSettings.CreateSettingsSheet: " & Err.Number & " - " & Err.Description
+    ' Attempt to clean up sheet if partially created
+    If Not ws Is Nothing Then
+        Application.DisplayAlerts = False
+        On Error Resume Next ' Ignore error if delete fails
+        ws.Delete
+        Application.DisplayAlerts = True
+    End If
+    Set ws = Nothing
+    ' Optionally re-raise the error if needed by caller
+    ' Err.Raise Err.Number, Err.Source, Err.Description, Err.HelpFile, Err.HelpContext
+End Sub
 
 ' Class initialize event
 Private Sub Class_Initialize()

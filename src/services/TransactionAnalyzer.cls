@@ -18,16 +18,6 @@ Implements ICategoryAnalyzer
 Implements ITimeAnalyzer
 Implements ITrendAnalyzer
 
-' Analysis result type
-Public Type AnalysisInsight
-    Category As String
-    Title As String
-    Description As String
-    Value As Variant
-    Trend As String ' "Up", "Down", "Neutral"
-    Importance As Integer ' 1 (Low) to 5 (High)
-End Type
-
 ' Private variables
 Private m_IsInitialized As Boolean
 Private m_InsightsSheet As Worksheet
